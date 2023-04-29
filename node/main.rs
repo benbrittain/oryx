@@ -20,8 +20,16 @@ struct Args {
 }
 
 #[derive(Debug, Deserialize)]
+enum StorageBackend {
+    #[serde(alias = "memory")]
+    InMemory,
+}
+
+
+#[derive(Debug, Deserialize)]
 struct Config {
     address: std::net::SocketAddr,
+    storage_backend: StorageBackend,
 }
 
 /// Read the oryx node config
@@ -38,14 +46,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     let args = Args::parse();
 
-
-
     let config = read_config(args.config).await?;
 
     let action_cache = ActionCacheService::default();
     let bytestream = BytestreamService::new();
     let capabilities = CapabilitiesService::default();
-    let cas = ContentStorageService::new();
+    let cas = ContentStorageService::new(match config.storage_backend {
+        StorageBackend::InMemory => cas::InMemory::default(),
+    });
     let execute = ExecutionService::new();
     let ops = OperationsService::new();
 

@@ -2,7 +2,7 @@ rust_library(
     name = "common",
     srcs = glob(["**/*.rs"]),
     crate_root = "lib.rs",
-    visibility = ["//node/..."],
+    visibility = ["PUBLIC"],
     deps = [
         "//proto:protos",
         "//third-party/rust:log",

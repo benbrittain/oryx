@@ -9,13 +9,13 @@ impl protos::ActionCache for ActionCacheService {
         &self,
         _request: Request<protos::re::GetActionResultRequest>,
     ) -> Result<Response<protos::re::ActionResult>, Status> {
-        todo!()
+        Err(Status::not_found("GetActionResult: Not yet implemented"))
     }
 
     async fn update_action_result(
         &self,
         _request: Request<protos::re::UpdateActionResultRequest>,
     ) -> Result<Response<protos::re::ActionResult>, Status> {
-        todo!()
+        Err(Status::not_found("UpdateActionResult: Not yet implemented"))
     }
 }

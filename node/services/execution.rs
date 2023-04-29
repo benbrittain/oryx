@@ -17,7 +17,7 @@ impl protos::Execution for ExecutionService {
         &self,
         request: Request<protos::re::ExecuteRequest>,
     ) -> Result<Response<Self::ExecuteStream>, Status> {
-        todo!();
+        Err(Status::not_found("Execute: Not yet implemented"))
     }
 
     type WaitExecutionStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
@@ -26,6 +26,6 @@ impl protos::Execution for ExecutionService {
         &self,
         request: Request<protos::re::WaitExecutionRequest>,
     ) -> Result<Response<Self::WaitExecutionStream>, Status> {
-        todo!()
+        Err(Status::not_found("WaitExecution: Not yet implemented"))
     }
 }

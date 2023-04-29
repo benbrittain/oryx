@@ -11,7 +11,7 @@ impl protos::Capabilities for CapabilitiesService {
         &self,
         request: Request<protos::re::GetCapabilitiesRequest>,
     ) -> Result<Response<protos::re::ServerCapabilities>, Status> {
-        info!("Instance: {}", request.get_ref().instance_name);
+        info!("Instance: '{}'", request.get_ref().instance_name);
         let api_version = protos::semver::SemVer {
             major: 2,
             minor: 0,

@@ -1,20 +1,25 @@
 use log::info;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
+use cas::*;
 
 #[derive(Debug)]
-pub struct ContentStorageService {}
+pub struct ContentStorageService<T> {
+    cas: T,
+}
 
-impl ContentStorageService {
-    pub fn new() -> Self {
-        ContentStorageService {}
+impl<T> ContentStorageService<T> {
+    pub fn new(cas: T) -> Self {
+        ContentStorageService {
+            cas
+        }
     }
 }
 
 type CasResult<T> = Result<tonic::Response<T>, tonic::Status>;
 
 #[tonic::async_trait]
-impl protos::ContentAddressableStorage for ContentStorageService {
+impl<T: ContentAddressableStorage + Sync + Send + 'static > protos::ContentAddressableStorage for ContentStorageService<T> {
     type GetTreeStream = ReceiverStream<Result<protos::re::GetTreeResponse, Status>>;
 
     async fn get_tree(
@@ -29,10 +34,20 @@ impl protos::ContentAddressableStorage for ContentStorageService {
         &self,
         request: tonic::Request<protos::re::FindMissingBlobsRequest>,
     ) -> CasResult<protos::re::FindMissingBlobsResponse> {
+        let mut missing_blob_digests = vec![];
+        for digest in request.into_inner().blob_digests {
+            if !self.cas.has_blob(digest.clone().into()).await.map_err(|e|
+                tonic::Status::unknown(e.to_string())
+            )? {
+                missing_blob_digests.push(digest);
+            }
+        }
+
+        info!("Missing {} blobs", missing_blob_digests.len());
         let resp = protos::re::FindMissingBlobsResponse {
-            missing_blob_digests: request.get_ref().blob_digests.clone(),
+            missing_blob_digests,
         };
-        info!("Find all blobs");
+
         Ok(tonic::Response::new(resp))
     }
 
@@ -45,6 +60,10 @@ impl protos::ContentAddressableStorage for ContentStorageService {
 
         let mut responses = vec![];
         for request in &request.get_ref().requests {
+            let digest = request.digest.clone().unwrap_or_default().into();
+            self.cas.write_blob(digest, &request.data).await.map_err(|e| {
+                tonic::Status::unknown(e.to_string())
+            })?;
             responses.push(Response {
                 digest: request.digest.clone(),
                 status: Some(Status::default()),
@@ -52,7 +71,6 @@ impl protos::ContentAddressableStorage for ContentStorageService {
         }
 
         let resp = protos::re::BatchUpdateBlobsResponse { responses };
-        info!("{resp:#?}");
         Ok(tonic::Response::new(resp))
     }
 
