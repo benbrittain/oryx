@@ -15,5 +15,6 @@ rust_binary(
         "//node/services:services",
         "//common:common",
         "//cas:cas",
+        "//execution:execution-engine",
     ],
 )

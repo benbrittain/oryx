@@ -26,9 +26,24 @@ enum StorageBackend {
 }
 
 #[derive(Debug, Deserialize)]
-struct Config {
+enum ExecutionEngine {
+    #[serde(rename = "insecure")]
+    Insecure,
+    #[serde(rename = "hermetic")]
+    Hermetic,
+}
+
+#[derive(Debug, Deserialize)]
+struct NodeConfig {
+    instance: String,
     address: std::net::SocketAddr,
     storage_backend: StorageBackend,
+    execution_engine: ExecutionEngine,
+}
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    node: NodeConfig,
 }
 
 /// Read the oryx node config
@@ -50,14 +65,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let action_cache = ActionCacheService::default();
     let bytestream = BytestreamService::new();
     let capabilities = CapabilitiesService::default();
-    let cas = ContentStorageService::new(match config.storage_backend {
+    let cas = ContentStorageService::new(match config.node.storage_backend {
         StorageBackend::InMemory => cas::InMemory::default(),
     });
-    let execute = ExecutionService::new();
+    let execute = ExecutionService::new(match config.node.execution_engine {
+        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::default(),
+        ExecutionEngine::Hermetic => todo!(),
+    });
     let ops = OperationsService::new();
 
-    let address = config.address;
-    info!("Serving on {}", address);
+    let address = config.node.address;
+    let instance = config.node.instance;
+    info!("Serving instance '{instance} 'on {address}");
     Server::builder()
         .add_service(ActionCacheServer::new(action_cache))
         .add_service(ByteStreamServer::new(bytestream))

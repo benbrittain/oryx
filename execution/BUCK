@@ -1,13 +1,14 @@
 rust_library(
-    name = "cas",
+    name = "execution-engine",
     srcs = glob(["**/*.rs"]),
     crate_root = "lib.rs",
-    visibility = ["//node/...", "//execution/..."],
+    visibility = ["//node/..."],
     deps = [
         "//third-party/rust:async-trait",
         "//third-party/rust:log",
-        "//third-party/rust:thiserror",
+        "//third-party/rust:serde",
         "//third-party/rust:tokio",
         "//common:common",
+        "//cas:cas",
     ],
 )

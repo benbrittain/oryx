@@ -1,16 +1,18 @@
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
-pub struct ExecutionService {}
+pub struct ExecutionService<T> {
+    engine: T,
+}
 
-impl ExecutionService {
-    pub fn new() -> Self {
-        ExecutionService {}
+impl<T> ExecutionService<T> {
+    pub fn new(engine: T) -> Self {
+        ExecutionService { engine }
     }
 }
 
 #[tonic::async_trait]
-impl protos::Execution for ExecutionService {
+impl<T: Sync + Send + 'static> protos::Execution for ExecutionService<T> {
     type ExecuteStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
 
     async fn execute(

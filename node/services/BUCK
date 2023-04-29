@@ -12,5 +12,6 @@ rust_library(
         "//third-party/rust:tonic",
         "//common:common",
         "//cas:cas",
+        "//execution:execution-engine",
     ],
 )
