@@ -17,6 +17,20 @@ impl<T, C: ContentAddressableStorage> ExecutionService<T, C> {
             engine,
         }
     }
+
+    pub async fn get_proto<P: prost::Message + Default>(
+        &self,
+        digest: common::Digest,
+    ) -> Result<P, Status> {
+        let blob = self
+            .cas
+            .read_blob(&digest.into())
+            .await
+            .map_err(|_| Status::invalid_argument("Failed to fetch blob from CAS."))?;
+        let proto = P::decode(&mut std::io::Cursor::new(blob))
+            .map_err(|_| Status::internal("Failed to decode Action proto: {action_digest}."))?;
+        Ok(proto)
+    }
 }
 
 #[tonic::async_trait]
@@ -37,28 +51,22 @@ impl<T: Sync + Send + 'static, C: Sync + Send + 'static + ContentAddressableStor
         }
 
         let action_digest = request.action_digest.ok_or(Status::invalid_argument(
-            "An Action Digest was not specified in the ExecuteRequest.",
+            "Invalid ExecuteRequest: no action digest specified.",
         ))?;
-
-        let action: Result<protos::re::Action, prost::DecodeError> = self
-            .cas
-            .read_blob(&action_digest.into())
-            .await
-            .map_err(|_| Status::invalid_argument("Failed to fetch blob from CAS."))
-            .map(|buf| protos::re::Action::decode(&mut std::io::Cursor::new(buf)))?;
-
-        let action = action.map_err(|_| {
-            Status::invalid_argument("Failed to decode Action proto: {action_digest}.")
-        })?;
-
+        let action: protos::re::Action = self.get_proto(action_digest.into()).await?;
         log::info!("{action:#?}");
 
         let command_digest = action.command_digest.ok_or(Status::invalid_argument(
             "Invalid Action: no command digest specified.",
         ))?;
-        let root_digest = action
-            .input_root_digest
-            .ok_or(Status::invalid_argument("Invalid Action: no root digest specified."))?;
+        let command: protos::re::Command = self.get_proto(command_digest.into()).await?;
+        log::info!("{command:#?}");
+
+        let root_digest = action.input_root_digest.ok_or(Status::invalid_argument(
+            "Invalid Action: no root digest specified.",
+        ))?;
+        let root_directory: protos::re::Directory = self.get_proto(root_digest.into()).await?;
+        log::info!("{root_directory:#?}");
 
         Err(Status::not_found("Execute: Not yet implemented"))
     }
