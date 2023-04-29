@@ -2,11 +2,12 @@ use crate::error::CasError;
 use async_trait::async_trait;
 use common::Digest;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct InMemory {
-    cas: Mutex<HashMap<Digest, Vec<u8>>>,
+    cas: Arc<Mutex<HashMap<Digest, Vec<u8>>>>,
 }
 
 #[async_trait]
@@ -18,18 +19,18 @@ impl crate::ContentAddressableStorage for InMemory {
         Ok(())
     }
 
-    async fn read_blob(&self, digest: Digest) -> Result<Vec<u8>, CasError> {
+    async fn read_blob(&self, digest: &Digest) -> Result<Vec<u8>, CasError> {
         let cas = self.cas.lock().await;
         log::info!("read: {}", digest);
         let data = cas
-            .get(&digest)
-            .ok_or_else(|| CasError::BlobNotFound(digest))?;
+            .get(digest)
+            .ok_or_else(|| CasError::BlobNotFound(digest.clone()))?;
         Ok(data.to_vec())
     }
 
-    async fn has_blob(&self, digest: Digest) -> Result<bool, CasError> {
+    async fn has_blob(&self, digest: &Digest) -> Result<bool, CasError> {
         let cas = self.cas.lock().await;
-        let r = cas.contains_key(&digest);
+        let r = cas.contains_key(digest);
         log::info!("check: {} / {}", digest, r);
         Ok(r)
     }

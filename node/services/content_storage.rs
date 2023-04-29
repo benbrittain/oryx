@@ -17,9 +17,7 @@ impl<T> ContentStorageService<T> {
 type CasResult<T> = Result<tonic::Response<T>, tonic::Status>;
 
 #[tonic::async_trait]
-impl<T: ContentAddressableStorage + Sync + Send + 'static> protos::ContentAddressableStorage
-    for ContentStorageService<T>
-{
+impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for ContentStorageService<T> {
     type GetTreeStream = ReceiverStream<Result<protos::re::GetTreeResponse, Status>>;
 
     async fn get_tree(
@@ -38,7 +36,7 @@ impl<T: ContentAddressableStorage + Sync + Send + 'static> protos::ContentAddres
         for digest in request.into_inner().blob_digests {
             if !self
                 .cas
-                .has_blob(digest.clone().into())
+                .has_blob(&digest.clone().into())
                 .await
                 .map_err(|e| tonic::Status::unknown(e.to_string()))?
             {

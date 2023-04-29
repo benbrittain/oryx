@@ -61,29 +61,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let config = read_config(args.config).await?;
-
-    let action_cache = ActionCacheService::default();
-    let bytestream = BytestreamService::new();
-    let capabilities = CapabilitiesService::default();
-    let cas = ContentStorageService::new(match config.node.storage_backend {
-        StorageBackend::InMemory => cas::InMemory::default(),
-    });
-    let execute = ExecutionService::new(match config.node.execution_engine {
-        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::default(),
-        ExecutionEngine::Hermetic => todo!(),
-    });
-    let ops = OperationsService::new();
-
     let address = config.node.address;
     let instance = config.node.instance;
+    let cas = match config.node.storage_backend {
+        StorageBackend::InMemory => cas::InMemory::default(),
+    };
+    let execution_engine = match config.node.execution_engine {
+        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::default(),
+        ExecutionEngine::Hermetic => todo!(),
+    };
+
     info!("Serving instance '{instance} 'on {address}");
     Server::builder()
-        .add_service(ActionCacheServer::new(action_cache))
-        .add_service(ByteStreamServer::new(bytestream))
-        .add_service(CapabilitiesServer::new(capabilities))
-        .add_service(ContentAddressableStorageServer::new(cas))
-        .add_service(ExecutionServer::new(execute))
-        .add_service(OperationsServer::new(ops))
+        .add_service(ActionCacheServer::new(ActionCacheService::default()))
+        .add_service(ByteStreamServer::new(BytestreamService::new()))
+        .add_service(CapabilitiesServer::new(CapabilitiesService::default()))
+        .add_service(ContentAddressableStorageServer::new(
+            ContentStorageService::new(cas.clone()),
+        ))
+        .add_service(ExecutionServer::new(ExecutionService::new(
+            &instance,
+            cas,
+            execution_engine,
+        )))
+        .add_service(OperationsServer::new(OperationsService::new()))
         .serve(address)
         .await?;
 
