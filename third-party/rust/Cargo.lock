@@ -870,6 +870,7 @@ checksum = "a5996294f19bd3aae0453a862ad728f60e6600695733dd5df01da90c54363a3c"
 name = "rust-third-party"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "clap",
  "futures",
  "log",
