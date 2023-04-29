@@ -11,7 +11,7 @@ rust_binary(
         "//third-party/rust:tokio",
         "//third-party/rust:toml",
         "//third-party/rust:tonic",
-
-        "//node/services:capabilities",
+        "//third-party/rust:prost-types",
+        "//node/services:services",
     ],
 )

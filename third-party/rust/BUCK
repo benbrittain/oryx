@@ -4,11 +4,11 @@
 
 load(
     "//third-party/rust/macros:rust_third_party.bzl",
-    "rust_buildscript_genrule_args", # names match above
+    "rust_buildscript_genrule_args",  # names match above
     "rust_buildscript_genrule_srcs",
-    "third_party_rust_library",
     "third_party_rust_binary",
     "third_party_rust_cxx_library",
+    "third_party_rust_library",
     "third_party_rust_prebuilt_cxx_library",
 )
 
@@ -1780,6 +1780,12 @@ third_party_rust_library(
     visibility = [],
 )
 
+alias(
+    name = "once_cell",
+    actual = ":once_cell-1.17.1",
+    visibility = ["PUBLIC"],
+)
+
 http_archive(
     name = "once_cell-1.17.1.crate",
     sha256 = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3",
@@ -2375,6 +2381,12 @@ third_party_rust_library(
     rustc_flags = ["--cap-lints=allow"],
     visibility = [],
     deps = [":getrandom-0.2.9"],
+)
+
+alias(
+    name = "regex",
+    actual = ":regex-1.8.1",
+    visibility = ["PUBLIC"],
 )
 
 http_archive(
@@ -2998,6 +3010,65 @@ third_party_rust_library(
 )
 
 alias(
+    name = "thiserror",
+    actual = ":thiserror-1.0.40",
+    visibility = ["PUBLIC"],
+)
+
+http_archive(
+    name = "thiserror-1.0.40.crate",
+    sha256 = "978c9a314bd8dc99be594bc3c175faaa9794be04a5a5e153caba6915336cebac",
+    strip_prefix = "thiserror-1.0.40",
+    urls = ["https://crates.io/api/v1/crates/thiserror/1.0.40/download"],
+    visibility = [],
+)
+
+third_party_rust_library(
+    name = "thiserror-1.0.40",
+    srcs = [":thiserror-1.0.40.crate"],
+    crate = "thiserror",
+    crate_root = "thiserror-1.0.40.crate/src/lib.rs",
+    edition = "2018",
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+    deps = [":thiserror-impl-1.0.40"],
+)
+
+third_party_rust_binary(
+    name = "thiserror-1.0.40-build-script-build",
+    srcs = [":thiserror-1.0.40.crate"],
+    crate = "build_script_build",
+    crate_root = "thiserror-1.0.40.crate/build.rs",
+    edition = "2018",
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+)
+
+http_archive(
+    name = "thiserror-impl-1.0.40.crate",
+    sha256 = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f",
+    strip_prefix = "thiserror-impl-1.0.40",
+    urls = ["https://crates.io/api/v1/crates/thiserror-impl/1.0.40/download"],
+    visibility = [],
+)
+
+third_party_rust_library(
+    name = "thiserror-impl-1.0.40",
+    srcs = [":thiserror-impl-1.0.40.crate"],
+    crate = "thiserror_impl",
+    crate_root = "thiserror-impl-1.0.40.crate/src/lib.rs",
+    edition = "2018",
+    proc_macro = True,
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+    deps = [
+        ":proc-macro2-1.0.56",
+        ":quote-1.0.26",
+        ":syn-2.0.15",
+    ],
+)
+
+alias(
     name = "tokio",
     actual = ":tokio-1.28.0",
     visibility = ["PUBLIC"],
@@ -3107,6 +3178,12 @@ third_party_rust_library(
         ":quote-1.0.26",
         ":syn-2.0.15",
     ],
+)
+
+alias(
+    name = "tokio-stream",
+    actual = ":tokio-stream-0.1.14",
+    visibility = ["PUBLIC"],
 )
 
 http_archive(

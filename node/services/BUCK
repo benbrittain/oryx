@@ -1,16 +1,14 @@
 rust_library(
-    name = "capabilities",
-    srcs = ["capabilities.rs"],
-    crate_root = "capabilities.rs",
+    name = "services",
+    srcs = glob(["*.rs"]),
+    crate_root = "lib.rs",
     visibility = ["//node/..."],
     deps = [
         "//proto:protos",
-        "//third-party/rust:clap",
         "//third-party/rust:log",
-        "//third-party/rust:pretty_env_logger",
         "//third-party/rust:serde",
         "//third-party/rust:tokio",
-        "//third-party/rust:toml",
+        "//third-party/rust:tokio-stream",
         "//third-party/rust:tonic",
     ],
 )

@@ -1,15 +1,22 @@
-pub use build::bazel::remote::execution::v2::action_cache_server::*;
-pub use build::bazel::remote::execution::v2::capabilities_server::*;
-pub use build::bazel::remote::execution::v2::content_addressable_storage_server::*;
-pub use build::bazel::remote::execution::v2::execution_server::*;
-pub use build::bazel::remote::execution::v2::*;
-pub use build::bazel::semver::SemVer;
-pub use google::bytestream::byte_stream_server::*;
-pub use google::bytestream::*;
-pub use google::longrunning;
-pub use google::longrunning::operations_server::*;
-pub use google::longrunning::*;
-pub use google::rpc::Status;
+pub use build::bazel::remote::execution::v2::{
+    self as re,
+    action_cache_server::{ActionCache, ActionCacheServer},
+    capabilities_server::{Capabilities, CapabilitiesServer},
+    content_addressable_storage_server::{
+        ContentAddressableStorage, ContentAddressableStorageServer,
+    },
+    execution_server::{Execution, ExecutionServer},
+};
+pub use build::bazel::semver;
+pub use google::bytestream::{
+    self as bytestream,
+    byte_stream_server::{ByteStream, ByteStreamServer},
+};
+pub use google::longrunning::{
+    self as longrunning,
+    operations_server::{Operations, OperationsServer},
+};
+pub use google::rpc;
 
 mod google {
     pub mod longrunning {
@@ -23,7 +30,7 @@ mod google {
     }
 }
 
-pub mod build {
+mod build {
     pub mod bazel {
         pub mod semver {
             tonic::include_proto!("build.bazel.semver");

@@ -6,6 +6,9 @@ use tokio::{fs::File, io::AsyncReadExt};
 use toml::Table;
 use tonic::transport::Server;
 
+use services::*;
+use protos::*;
+
 #[derive(Parser, Debug)]
 #[command(name = "oryx-node")]
 #[command(author = "Benjamin Brittain. <ben@brittain.org>")]
@@ -34,14 +37,27 @@ async fn read_config(config_file: PathBuf) -> Result<Config, Box<dyn std::error:
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     let args = Args::parse();
+
+
+
     let config = read_config(args.config).await?;
 
-    let capabilities = capabilities::CapabilitiesService::default();
+    let action_cache = ActionCacheService::default();
+    let bytestream = BytestreamService::new();
+    let capabilities = CapabilitiesService::default();
+    let cas = ContentStorageService::new();
+    let execute = ExecutionService::new();
+    let ops = OperationsService::new();
 
     let address = config.address;
     info!("Serving on {}", address);
     Server::builder()
-        .add_service(protos::CapabilitiesServer::new(capabilities))
+        .add_service(ActionCacheServer::new(action_cache))
+        .add_service(ByteStreamServer::new(bytestream))
+        .add_service(CapabilitiesServer::new(capabilities))
+        .add_service(ContentAddressableStorageServer::new(cas))
+        .add_service(ExecutionServer::new(execute))
+        .add_service(OperationsServer::new(ops))
         .serve(address)
         .await?;
 
