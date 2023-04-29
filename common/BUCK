@@ -1,0 +1,14 @@
+rust_library(
+    name = "common",
+    srcs = glob(["**/*.rs"]),
+    crate_root = "lib.rs",
+    visibility = ["//node/..."],
+    deps = [
+        "//proto:protos",
+        "//third-party/rust:log",
+        "//third-party/rust:once_cell",
+        "//third-party/rust:serde",
+        "//third-party/rust:thiserror",
+        "//third-party/rust:regex",
+    ],
+)
