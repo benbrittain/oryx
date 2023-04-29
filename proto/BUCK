@@ -1,0 +1,17 @@
+load(":defs.bzl", "rust_protobuf_library")
+
+rust_protobuf_library(
+    name = "protos",
+    srcs = ["lib.rs"],
+    build_script = "build.rs",
+    protos = glob([
+        "build/**/*.proto",
+        "google/**/*.proto",
+    ]),
+    visibility = ["PUBLIC"],
+    deps = [
+        "//third-party/rust:prost",
+        "//third-party/rust:prost-types",
+        "//third-party/rust:tonic",
+    ],
+)
