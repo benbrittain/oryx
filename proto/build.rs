@@ -1,4 +1,3 @@
-
 fn get_env(key: &str) -> Option<std::ffi::OsString> {
     println!("cargo:rerun-if-env-changed={}", key);
     std::env::var_os(key)

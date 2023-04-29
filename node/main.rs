@@ -1,8 +1,10 @@
 use clap::Parser;
+use log::info;
 use serde::Deserialize;
 use std::path::PathBuf;
 use tokio::{fs::File, io::AsyncReadExt};
 use toml::Table;
+use tonic::transport::Server;
 
 #[derive(Parser, Debug)]
 #[command(name = "oryx-node")]
@@ -30,9 +32,18 @@ async fn read_config(config_file: PathBuf) -> Result<Config, Box<dyn std::error:
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    pretty_env_logger::init();
     let args = Args::parse();
     let config = read_config(args.config).await?;
-    println!("{config:?}");
+
+    let capabilities = capabilities::CapabilitiesService::default();
+
+    let address = config.address;
+    info!("Serving on {}", address);
+    Server::builder()
+        .add_service(protos::CapabilitiesServer::new(capabilities))
+        .serve(address)
+        .await?;
 
     Ok(())
 }

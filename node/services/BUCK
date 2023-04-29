@@ -1,7 +1,8 @@
-rust_binary(
-    name = "node",
-    srcs = ["main.rs"],
-    crate_root = "main.rs",
+rust_library(
+    name = "capabilities",
+    srcs = ["capabilities.rs"],
+    crate_root = "capabilities.rs",
+    visibility = ["//node/..."],
     deps = [
         "//proto:protos",
         "//third-party/rust:clap",
@@ -11,7 +12,5 @@ rust_binary(
         "//third-party/rust:tokio",
         "//third-party/rust:toml",
         "//third-party/rust:tonic",
-
-        "//node/services:capabilities",
     ],
 )
