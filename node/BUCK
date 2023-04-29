@@ -12,7 +12,6 @@ rust_binary(
         "//third-party/rust:toml",
         "//third-party/rust:tonic",
         "//third-party/rust:prost-types",
-
         "//node/services:services",
         "//common:common",
         "//cas:cas",

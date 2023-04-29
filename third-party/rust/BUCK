@@ -4,11 +4,11 @@
 
 load(
     "//third-party/rust/macros:rust_third_party.bzl",
-    "rust_buildscript_genrule_args", # names match above
+    "rust_buildscript_genrule_args",  # names match above
     "rust_buildscript_genrule_srcs",
-    "third_party_rust_library",
     "third_party_rust_binary",
     "third_party_rust_cxx_library",
+    "third_party_rust_library",
     "third_party_rust_prebuilt_cxx_library",
 )
 

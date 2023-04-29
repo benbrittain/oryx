@@ -1,7 +1,7 @@
+use cas::*;
 use log::info;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use cas::*;
 
 #[derive(Debug)]
 pub struct ContentStorageService<T> {
@@ -10,16 +10,16 @@ pub struct ContentStorageService<T> {
 
 impl<T> ContentStorageService<T> {
     pub fn new(cas: T) -> Self {
-        ContentStorageService {
-            cas
-        }
+        ContentStorageService { cas }
     }
 }
 
 type CasResult<T> = Result<tonic::Response<T>, tonic::Status>;
 
 #[tonic::async_trait]
-impl<T: ContentAddressableStorage + Sync + Send + 'static > protos::ContentAddressableStorage for ContentStorageService<T> {
+impl<T: ContentAddressableStorage + Sync + Send + 'static> protos::ContentAddressableStorage
+    for ContentStorageService<T>
+{
     type GetTreeStream = ReceiverStream<Result<protos::re::GetTreeResponse, Status>>;
 
     async fn get_tree(
@@ -36,9 +36,12 @@ impl<T: ContentAddressableStorage + Sync + Send + 'static > protos::ContentAddre
     ) -> CasResult<protos::re::FindMissingBlobsResponse> {
         let mut missing_blob_digests = vec![];
         for digest in request.into_inner().blob_digests {
-            if !self.cas.has_blob(digest.clone().into()).await.map_err(|e|
-                tonic::Status::unknown(e.to_string())
-            )? {
+            if !self
+                .cas
+                .has_blob(digest.clone().into())
+                .await
+                .map_err(|e| tonic::Status::unknown(e.to_string()))?
+            {
                 missing_blob_digests.push(digest);
             }
         }
@@ -61,9 +64,10 @@ impl<T: ContentAddressableStorage + Sync + Send + 'static > protos::ContentAddre
         let mut responses = vec![];
         for request in &request.get_ref().requests {
             let digest = request.digest.clone().unwrap_or_default().into();
-            self.cas.write_blob(digest, &request.data).await.map_err(|e| {
-                tonic::Status::unknown(e.to_string())
-            })?;
+            self.cas
+                .write_blob(digest, &request.data)
+                .await
+                .map_err(|e| tonic::Status::unknown(e.to_string()))?;
             responses.push(Response {
                 digest: request.digest.clone(),
                 status: Some(Status::default()),

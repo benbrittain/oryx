@@ -1,11 +1,11 @@
-use common::Digest;
 use async_trait::async_trait;
+use common::Digest;
 
-mod memory;
 mod error;
+mod memory;
 
-pub use memory::InMemory;
 pub use error::CasError;
+pub use memory::InMemory;
 
 #[async_trait]
 pub trait ContentAddressableStorage {

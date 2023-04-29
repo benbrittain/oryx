@@ -6,8 +6,8 @@ use tokio::{fs::File, io::AsyncReadExt};
 use toml::Table;
 use tonic::transport::Server;
 
-use services::*;
 use protos::*;
+use services::*;
 
 #[derive(Parser, Debug)]
 #[command(name = "oryx-node")]
@@ -24,7 +24,6 @@ enum StorageBackend {
     #[serde(alias = "memory")]
     InMemory,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct Config {

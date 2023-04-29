@@ -8,7 +8,7 @@ pub struct BytestreamService {}
 
 impl BytestreamService {
     pub fn new() -> Self {
-        BytestreamService { }
+        BytestreamService {}
     }
 }
 
