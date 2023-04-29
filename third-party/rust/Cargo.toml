@@ -1,0 +1,23 @@
+[workspace]
+
+[package]
+name = "rust-third-party"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[[bin]]
+name = "fake"
+path = "."
+
+[dependencies]
+tonic = "0.9"
+tokio = { version = "1.0", features = ["fs", "macros", "rt-multi-thread", "io-util", "process"] }
+prost = "0.11"
+prost-types = "0.11"
+futures = "0.3"
+openat2 = "0.1"
+uuid = { version = "1.2", features = [ "v4", "fast-rng", "macro-diagnostics" ] }
+tonic-build = "0.9"
+toml = "0.7.3"
+clap = { version = "4.2.5", features = [ "derive" ] }
