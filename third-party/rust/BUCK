@@ -4,11 +4,11 @@
 
 load(
     "//third-party/rust/macros:rust_third_party.bzl",
-    "rust_buildscript_genrule_args",  # names match above
+    "rust_buildscript_genrule_args", # names match above
     "rust_buildscript_genrule_srcs",
+    "third_party_rust_library",
     "third_party_rust_binary",
     "third_party_rust_cxx_library",
-    "third_party_rust_library",
     "third_party_rust_prebuilt_cxx_library",
 )
 
@@ -2393,6 +2393,12 @@ rust_buildscript_genrule_srcs(
     version = "1.0.12",
 )
 
+alias(
+    name = "serde",
+    actual = ":serde-1.0.160",
+    visibility = ["PUBLIC"],
+)
+
 http_archive(
     name = "serde-1.0.160.crate",
     sha256 = "bb2f3770c8bce3bcda7e149193a069a0f4365bda1fa5cd88e03bca26afc1216c",
@@ -2409,10 +2415,13 @@ third_party_rust_library(
     edition = "2015",
     features = [
         "default",
+        "derive",
+        "serde_derive",
         "std",
     ],
     rustc_flags = ["--cap-lints=allow"],
     visibility = [],
+    deps = [":serde_derive-1.0.160"],
 )
 
 third_party_rust_binary(
@@ -2423,8 +2432,46 @@ third_party_rust_binary(
     edition = "2015",
     features = [
         "default",
+        "derive",
+        "serde_derive",
         "std",
     ],
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+)
+
+http_archive(
+    name = "serde_derive-1.0.160.crate",
+    sha256 = "291a097c63d8497e00160b166a967a4a79c64f3facdd01cbd7502231688d77df",
+    strip_prefix = "serde_derive-1.0.160",
+    urls = ["https://crates.io/api/v1/crates/serde_derive/1.0.160/download"],
+    visibility = [],
+)
+
+third_party_rust_library(
+    name = "serde_derive-1.0.160",
+    srcs = [":serde_derive-1.0.160.crate"],
+    crate = "serde_derive",
+    crate_root = "serde_derive-1.0.160.crate/src/lib.rs",
+    edition = "2015",
+    features = ["default"],
+    proc_macro = True,
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+    deps = [
+        ":proc-macro2-1.0.56",
+        ":quote-1.0.26",
+        ":syn-2.0.15",
+    ],
+)
+
+third_party_rust_binary(
+    name = "serde_derive-1.0.160-build-script-build",
+    srcs = [":serde_derive-1.0.160.crate"],
+    crate = "build_script_build",
+    crate_root = "serde_derive-1.0.160.crate/build.rs",
+    edition = "2015",
+    features = ["default"],
     rustc_flags = ["--cap-lints=allow"],
     visibility = [],
 )
