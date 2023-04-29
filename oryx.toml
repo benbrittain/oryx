@@ -1,0 +1,3 @@
+# Oryx Node Configuration
+
+address = "[::1]:8980"

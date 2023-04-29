@@ -1,0 +1,12 @@
+rust_binary(
+    name = "node",
+    srcs = ["main.rs"],
+    crate_root = "main.rs",
+    deps = [
+        "//proto:protos",
+        "//third-party/rust:clap",
+        "//third-party/rust:serde",
+        "//third-party/rust:tokio",
+        "//third-party/rust:toml",
+    ],
+)
