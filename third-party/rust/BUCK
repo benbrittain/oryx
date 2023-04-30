@@ -4,11 +4,11 @@
 
 load(
     "//third-party/rust/macros:rust_third_party.bzl",
-    "rust_buildscript_genrule_args",  # names match above
+    "rust_buildscript_genrule_args", # names match above
     "rust_buildscript_genrule_srcs",
+    "third_party_rust_library",
     "third_party_rust_binary",
     "third_party_rust_cxx_library",
-    "third_party_rust_library",
     "third_party_rust_prebuilt_cxx_library",
 )
 
@@ -130,19 +130,25 @@ third_party_rust_library(
     visibility = [],
 )
 
+alias(
+    name = "anyhow",
+    actual = ":anyhow-1.0.71",
+    visibility = ["PUBLIC"],
+)
+
 http_archive(
-    name = "anyhow-1.0.70.crate",
-    sha256 = "7de8ce5e0f9f8d88245311066a578d72b7af3e7088f32783804676302df237e4",
-    strip_prefix = "anyhow-1.0.70",
-    urls = ["https://crates.io/api/v1/crates/anyhow/1.0.70/download"],
+    name = "anyhow-1.0.71.crate",
+    sha256 = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8",
+    strip_prefix = "anyhow-1.0.71",
+    urls = ["https://crates.io/api/v1/crates/anyhow/1.0.71/download"],
     visibility = [],
 )
 
 third_party_rust_library(
-    name = "anyhow-1.0.70",
-    srcs = [":anyhow-1.0.70.crate"],
+    name = "anyhow-1.0.71",
+    srcs = [":anyhow-1.0.71.crate"],
     crate = "anyhow",
-    crate_root = "anyhow-1.0.70.crate/src/lib.rs",
+    crate_root = "anyhow-1.0.71.crate/src/lib.rs",
     edition = "2018",
     features = [
         "default",
@@ -153,10 +159,10 @@ third_party_rust_library(
 )
 
 third_party_rust_binary(
-    name = "anyhow-1.0.70-build-script-build",
-    srcs = [":anyhow-1.0.70.crate"],
+    name = "anyhow-1.0.71-build-script-build",
+    srcs = [":anyhow-1.0.71.crate"],
     crate = "build_script_build",
-    crate_root = "anyhow-1.0.70.crate/build.rs",
+    crate_root = "anyhow-1.0.71.crate/build.rs",
     edition = "2018",
     features = [
         "default",
@@ -2213,7 +2219,7 @@ third_party_rust_library(
     rustc_flags = ["--cap-lints=allow"],
     visibility = [],
     deps = [
-        ":anyhow-1.0.70",
+        ":anyhow-1.0.71",
         ":itertools-0.10.5",
         ":proc-macro2-1.0.56",
         ":quote-1.0.26",

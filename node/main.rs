@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ExecutionEngine::Hermetic => todo!(),
     };
 
-    info!("Serving instance '{instance} 'on {address}");
+    info!("Serving instance '{instance}' on {address}");
     Server::builder()
         .add_service(ActionCacheServer::new(ActionCacheService::default()))
         .add_service(ByteStreamServer::new(BytestreamService::new()))

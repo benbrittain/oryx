@@ -1,5 +1,5 @@
 use cas::ContentAddressableStorage;
-use prost::Message;
+use execution_engine::ExecutionEngine;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
@@ -26,7 +26,9 @@ impl<T, C: ContentAddressableStorage> ExecutionService<T, C> {
             .cas
             .read_blob(&digest.into())
             .await
-            .map_err(|_| Status::invalid_argument("Failed to fetch blob from CAS."))?;
+            .map_err(|_| Status::failed_precondition("Failed to fetch blob from CAS."))?;
+        // TODO should return a precondition failure / violation setup here as well.
+        // https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L139
         let proto = P::decode(&mut std::io::Cursor::new(blob))
             .map_err(|_| Status::internal("Failed to decode Action proto: {action_digest}."))?;
         Ok(proto)
@@ -34,8 +36,8 @@ impl<T, C: ContentAddressableStorage> ExecutionService<T, C> {
 }
 
 #[tonic::async_trait]
-impl<T: Sync + Send + 'static, C: Sync + Send + 'static + ContentAddressableStorage>
-    protos::Execution for ExecutionService<T, C>
+impl<T: ExecutionEngine, C: ContentAddressableStorage> protos::Execution
+    for ExecutionService<T, C>
 {
     type ExecuteStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
 
@@ -50,6 +52,7 @@ impl<T: Sync + Send + 'static, C: Sync + Send + 'static + ContentAddressableStor
             ));
         }
 
+        // Get all the information needed to build a command for execution
         let action_digest = request.action_digest.ok_or(Status::invalid_argument(
             "Invalid ExecuteRequest: no action digest specified.",
         ))?;
@@ -67,6 +70,15 @@ impl<T: Sync + Send + 'static, C: Sync + Send + 'static + ContentAddressableStor
         ))?;
         let root_directory: protos::re::Directory = self.get_proto(root_digest.into()).await?;
         log::info!("{root_directory:#?}");
+
+        let cmd = execution_engine::Command {
+            arguments: command.arguments,
+        };
+        let dir = execution_engine::DirectoryLayout::default();
+        self.engine
+            .run_command(cmd, dir)
+            .await
+            .map_err(|e| Status::invalid_argument("Invalid Action: no root digest specified."))?;
 
         Err(Status::not_found("Execute: Not yet implemented"))
     }
