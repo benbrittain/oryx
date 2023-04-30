@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         StorageBackend::InMemory => cas::InMemory::default(),
     };
     let execution_engine = match config.node.execution_engine {
-        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new()?,
+        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
         ExecutionEngine::Hermetic => todo!(),
     };
 

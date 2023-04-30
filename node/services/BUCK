@@ -5,6 +5,8 @@ rust_library(
     visibility = ["//node/..."],
     deps = [
         "//proto:protos",
+        "//third-party/rust:anyhow",
+        "//third-party/rust:futures",
         "//third-party/rust:log",
         "//third-party/rust:serde",
         "//third-party/rust:tokio",
