@@ -6,9 +6,12 @@ rust_library(
     deps = [
         "//third-party/rust:anyhow",
         "//third-party/rust:async-trait",
+        "//third-party/rust:libc",
         "//third-party/rust:log",
         "//third-party/rust:serde",
+        "//third-party/rust:tempdir",
         "//third-party/rust:tokio",
+        "//third-party/rust:openat2",
         "//common:common",
         "//cas:cas",
     ],

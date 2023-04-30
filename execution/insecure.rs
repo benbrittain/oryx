@@ -1,9 +1,31 @@
 use crate::*;
-use anyhow::Error;
+use anyhow::{anyhow, Error};
+use openat2::*;
+use std::os::fd::RawFd;
+use tempdir::TempDir;
 use tokio::process;
 
-#[derive(Default, Debug)]
-pub struct Insecure {}
+#[derive(Debug)]
+pub struct Insecure {
+    root_fd: RawFd,
+}
+
+impl Insecure {
+    pub fn new() -> Result<Self, Error> {
+        if !has_openat2_cached() {
+            return Err(anyhow!(
+                "Insecure is not particularly secure, but it does use openat2. \
+                    If your system does not support that, please file an issue."
+            ));
+        }
+        let tmp_dir = TempDir::new("oryx-insecure")?;
+        let root_path = tmp_dir.path();
+        let mut how = OpenHow::new(libc::O_CLOEXEC | libc::O_DIRECTORY, 0);
+        how.resolve |= ResolveFlags::NO_SYMLINKS;
+        let root_fd = openat2(None, &root_path, &how)?;
+        Ok(Insecure { root_fd })
+    }
+}
 
 #[async_trait]
 impl ExecutionEngine for Insecure {

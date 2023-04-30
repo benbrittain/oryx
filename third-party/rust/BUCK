@@ -1521,6 +1521,12 @@ third_party_rust_library(
     visibility = [],
 )
 
+alias(
+    name = "libc",
+    actual = ":libc-0.2.142",
+    visibility = ["PUBLIC"],
+)
+
 http_archive(
     name = "libc-0.2.142.crate",
     sha256 = "6a987beff54b60ffa6d51982e1aa1146bc42f19bd26be28b0586f252fccf5317",
@@ -2312,6 +2318,34 @@ third_party_rust_binary(
 )
 
 http_archive(
+    name = "rand-0.4.6.crate",
+    sha256 = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293",
+    strip_prefix = "rand-0.4.6",
+    urls = ["https://crates.io/api/v1/crates/rand/0.4.6/download"],
+    visibility = [],
+)
+
+third_party_rust_library(
+    name = "rand-0.4.6",
+    srcs = [":rand-0.4.6.crate"],
+    crate = "rand",
+    crate_root = "rand-0.4.6.crate/src/lib.rs",
+    edition = "2015",
+    features = [
+        "default",
+        "libc",
+        "std",
+    ],
+    platform = {
+        "linux-x86_64": dict(
+            deps = [":libc-0.2.142"],
+        ),
+    },
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+)
+
+http_archive(
     name = "rand-0.8.5.crate",
     sha256 = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404",
     strip_prefix = "rand-0.8.5",
@@ -2469,6 +2503,24 @@ third_party_rust_library(
         "unicode-script",
         "unicode-segment",
     ],
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+)
+
+http_archive(
+    name = "remove_dir_all-0.5.3.crate",
+    sha256 = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7",
+    strip_prefix = "remove_dir_all-0.5.3",
+    urls = ["https://crates.io/api/v1/crates/remove_dir_all/0.5.3/download"],
+    visibility = [],
+)
+
+third_party_rust_library(
+    name = "remove_dir_all-0.5.3",
+    srcs = [":remove_dir_all-0.5.3.crate"],
+    crate = "remove_dir_all",
+    crate_root = "remove_dir_all-0.5.3.crate/src/lib.rs",
+    edition = "2015",
     rustc_flags = ["--cap-lints=allow"],
     visibility = [],
 )
@@ -2974,6 +3026,34 @@ third_party_rust_library(
     edition = "2018",
     rustc_flags = ["--cap-lints=allow"],
     visibility = [],
+)
+
+alias(
+    name = "tempdir",
+    actual = ":tempdir-0.3.7",
+    visibility = ["PUBLIC"],
+)
+
+http_archive(
+    name = "tempdir-0.3.7.crate",
+    sha256 = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8",
+    strip_prefix = "tempdir-0.3.7",
+    urls = ["https://crates.io/api/v1/crates/tempdir/0.3.7/download"],
+    visibility = [],
+)
+
+third_party_rust_library(
+    name = "tempdir-0.3.7",
+    srcs = [":tempdir-0.3.7.crate"],
+    crate = "tempdir",
+    crate_root = "tempdir-0.3.7.crate/src/lib.rs",
+    edition = "2015",
+    rustc_flags = ["--cap-lints=allow"],
+    visibility = [],
+    deps = [
+        ":rand-0.4.6",
+        ":remove_dir_all-0.5.3",
+    ],
 )
 
 http_archive(
