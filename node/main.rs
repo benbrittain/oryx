@@ -6,6 +6,8 @@ use tokio::{fs::File, io::AsyncReadExt};
 use toml::Table;
 use tonic::transport::Server;
 
+mod services;
+
 use protos::*;
 use services::*;
 
