@@ -66,10 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cas = match config.node.storage_backend {
         StorageBackend::InMemory => cas::InMemory::default(),
     };
-    let execution_engine = match config.node.execution_engine {
-        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
-        ExecutionEngine::Hermetic => todo!(),
-    };
+    let execution_engine =
+        execution_engine::ExecutionEngine::new(match config.node.execution_engine {
+            ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
+            ExecutionEngine::Hermetic => todo!(),
+        });
 
     info!("Serving instance '{instance}' on {address}");
     Server::builder()

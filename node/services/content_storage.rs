@@ -78,9 +78,27 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
 
     async fn batch_read_blobs(
         &self,
-        _request: tonic::Request<protos::re::BatchReadBlobsRequest>,
+        request: tonic::Request<protos::re::BatchReadBlobsRequest>,
     ) -> CasResult<protos::re::BatchReadBlobsResponse> {
-        info!("");
-        todo!()
+        let request = request.into_inner();
+
+        let mut responses = vec![];
+        for digest in &request.digests {
+            info!("read digest: {:#?}", digest);
+            let blob = self
+                .cas
+                .read_blob(digest.clone().into())
+                .await
+                .map_err(|e| tonic::Status::unknown(format!("Reading: {}", e)))?;
+            responses.push(protos::re::batch_read_blobs_response::Response {
+                digest: Some(digest.clone()),
+                data: blob,
+                compressor: protos::re::compressor::Value::Identity as i32,
+                status: Default::default(),
+            });
+        }
+        info!("read: {:#?}", request);
+        let resp = protos::re::BatchReadBlobsResponse { responses };
+        Ok(tonic::Response::new(resp))
     }
 }

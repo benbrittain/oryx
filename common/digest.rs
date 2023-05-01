@@ -7,13 +7,34 @@ static DIGEST_REGEX: Lazy<Regex> =
 
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
 pub struct Digest {
-    pub hash: String,
-    pub size_bytes: i64,
+    hash: String,
+    size_bytes: i64,
+}
+
+// Intentionally using getters so that Digest creation is forced through
+// the validation logic in FromStr.
+impl Digest {
+    fn hash(&self) -> &str {
+        &self.hash
+    }
+
+    fn size_bytes(&self) -> i64 {
+        self.size_bytes
+    }
 }
 
 impl std::fmt::Display for Digest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.hash, self.size_bytes)
+    }
+}
+
+impl Into<protos::re::Digest> for Digest {
+    fn into(self) -> protos::re::Digest {
+        protos::re::Digest {
+            hash: self.hash,
+            size_bytes: self.size_bytes,
+        }
     }
 }
 

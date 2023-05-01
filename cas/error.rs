@@ -6,4 +6,6 @@ pub enum CasError {
     Unknown,
     #[error("Blob not found for: {0:?}")]
     BlobNotFound(common::Digest),
+    #[error("Blob not found for: {0:?}")]
+    IoError(#[from] std::io::Error),
 }
