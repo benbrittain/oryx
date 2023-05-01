@@ -17,7 +17,7 @@ prost = "0.11"
 prost-types = "0.11"
 futures = "0.3"
 openat2 = "0.1"
-uuid = { version = "1.2", features = [ "v4", "fast-rng", "macro-diagnostics" ] }
+uuid = { version = "1.2", features = ["v4", "fast-rng", "macro-diagnostics"] }
 tonic-build = "0.9"
 toml = "0.7.3"
 clap = { version = "4.2.5", features = [ "derive" ] }
@@ -33,3 +33,5 @@ async-trait = "0.1.68"
 anyhow = "1.0.71"
 tempdir = "0.3.7"
 libc = "0.2.142"
+sha2 = "0.10.6"
+base16ct = { version = "0.2.0", features = ["std"] }
