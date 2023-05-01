@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
+use tracing::{info, trace};
 
 pub static EXEC_OP_METADATA: &'static str =
     "type.googleapis.com/build.bazel.remote.execution.v2.ExecuteOperationMetadata";
@@ -109,7 +110,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             ))?;
                         let action: protos::re::Action =
                             get_proto(cas.clone(), action_digest.clone().into()).await?;
-                        log::trace!("{action:#?}");
+                        trace!("{action:#?}");
 
                         let command_digest =
                             action.command_digest.ok_or(Status::invalid_argument(
@@ -117,14 +118,14 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             ))?;
                         let command: protos::re::Command =
                             get_proto(cas.clone(), command_digest.into()).await?;
-                        log::trace!("{command:#?}");
+                        trace!("{command:#?}");
 
                         let root_digest = action.input_root_digest.ok_or(
                             Status::invalid_argument("Invalid Action: no root digest specified."),
                         )?;
                         let root_directory: protos::re::Directory =
                             get_proto(cas.clone(), root_digest.into()).await?;
-                        log::trace!("{root_directory:#?}");
+                        trace!("{root_directory:#?}");
 
                         // Collect a command for the execution engine
                         let cmd = execution_engine::Command {
@@ -164,7 +165,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                 move |output_paths| {
                     let cas = cas2.clone();
                     async move {
-                        log::info!("## Verifying ## ");
+                        info!("## Verifying ## ");
                         let mut entries = vec![];
 
                         for (entry_path, file_path) in output_paths {
@@ -184,7 +185,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
         // TODO is there an easy way to map over this instead of making another channel?
         let (tx, rx) = mpsc::channel(32);
         while let Some(event) = exec_events.recv().await {
-            log::info!("{:?}", event);
+            info!("{:?}", event);
             tx.send(convert_to_op(event))
                 .await
                 .map_err(|e| Status::unknown(format!("Failed to execute command: {e}")))?;
@@ -245,7 +246,7 @@ fn convert_to_op(
                 });
             }
 
-            log::info!("output: {:#?}", output_files);
+            info!("output: {:#?}", output_files);
 
             let response = protos::re::ExecuteResponse {
                 result: Some(protos::re::ActionResult {

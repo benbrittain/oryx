@@ -1,10 +1,10 @@
 use clap::Parser;
-use log::info;
 use serde::Deserialize;
 use std::path::PathBuf;
 use tokio::{fs::File, io::AsyncReadExt};
 use toml::Table;
 use tonic::transport::Server;
+use tracing::info;
 
 mod services;
 
@@ -59,10 +59,12 @@ async fn read_config(config_file: PathBuf) -> Result<Config, Box<dyn std::error:
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    pretty_env_logger::init();
     let args = Args::parse();
 
     let config = read_config(args.config).await?;
+
+    tracing_subscriber::fmt::init();
+
     let address = config.node.address;
     let instance = config.node.instance;
     let cas = match config.node.storage_backend {
@@ -74,7 +76,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ExecutionEngine::Hermetic => todo!(),
         });
 
-    info!("Serving instance '{instance}' on {address}");
+    eprintln!("Serving instance '{instance}' on {address}");
+
     Server::builder()
         .add_service(ActionCacheServer::new(ActionCacheService::default()))
         .add_service(ByteStreamServer::new(BytestreamService::new()))

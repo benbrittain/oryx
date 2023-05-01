@@ -1,7 +1,7 @@
 use cas::*;
-use log::info;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
+use tracing::{info, trace};
 
 #[derive(Debug)]
 pub struct ContentStorageService<T> {

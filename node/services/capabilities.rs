@@ -1,5 +1,5 @@
-use log::info;
 use tonic::{Request, Response, Status};
+use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct CapabilitiesService {}

@@ -1,5 +1,6 @@
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
+use tracing::error;
 
 #[derive(Debug)]
 pub struct BytestreamService {}
@@ -25,7 +26,7 @@ impl protos::ByteStream for BytestreamService {
         &self,
         request: Request<tonic::Streaming<protos::bytestream::WriteRequest>>,
     ) -> Result<Response<protos::bytestream::WriteResponse>, Status> {
-        log::error!("{request:#?}");
+        error!("{request:#?}");
         todo!();
     }
 
