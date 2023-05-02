@@ -20,8 +20,11 @@ use services::*;
 #[command(version = "0.1")]
 #[command(about = "Oryx Remote Build Execution node", long_about = None)]
 struct Args {
+    /// Path to oryx configuration file
     #[arg(long)]
     config: PathBuf,
+
+    /// Enable traces for visualizing in https://ui.perfetto.dev
     #[arg(long)]
     trace: bool,
 }
