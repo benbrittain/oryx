@@ -6,6 +6,9 @@ use toml::Table;
 use tonic::transport::Server;
 use tracing::info;
 
+use tracing_chrome::{ChromeLayerBuilder, TraceStyle};
+use tracing_subscriber::{prelude::*, registry::Registry};
+
 mod services;
 
 use protos::*;
@@ -19,6 +22,8 @@ use services::*;
 struct Args {
     #[arg(long)]
     config: PathBuf,
+    #[arg(long)]
+    trace: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +68,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = read_config(args.config).await?;
 
-    tracing_subscriber::fmt::init();
+    let _guard = if args.trace {
+        let (chrome_layer, guard) = ChromeLayerBuilder::new()
+            .include_args(true)
+            .trace_style(TraceStyle::Async)
+            .build();
+        tracing_subscriber::registry().with(chrome_layer).init();
+        Some(guard)
+    } else {
+        tracing_subscriber::fmt::init();
+        None
+    };
 
     let address = config.node.address;
     let instance = config.node.instance;
@@ -79,6 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Serving instance '{instance}' on {address}");
 
     Server::builder()
+        .trace_fn(|event| tracing::info_span!("gRPC Request", api = event.uri().path()))
         .add_service(ActionCacheServer::new(ActionCacheService::default()))
         .add_service(ByteStreamServer::new(BytestreamService::new()))
         .add_service(CapabilitiesServer::new(CapabilitiesService::default()))

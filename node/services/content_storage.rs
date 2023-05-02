@@ -1,7 +1,7 @@
 use cas::*;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::{info, trace};
+use tracing::{info, instrument, trace};
 
 #[derive(Debug)]
 pub struct ContentStorageService<T> {
@@ -28,6 +28,7 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         todo!()
     }
 
+    #[instrument(skip_all)]
     async fn find_missing_blobs(
         &self,
         request: tonic::Request<protos::re::FindMissingBlobsRequest>,
@@ -52,6 +53,7 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         Ok(tonic::Response::new(resp))
     }
 
+    #[instrument(skip_all)]
     async fn batch_update_blobs(
         &self,
         request: tonic::Request<protos::re::BatchUpdateBlobsRequest>,
@@ -76,6 +78,7 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         Ok(tonic::Response::new(resp))
     }
 
+    #[instrument(skip_all)]
     async fn batch_read_blobs(
         &self,
         request: tonic::Request<protos::re::BatchReadBlobsRequest>,

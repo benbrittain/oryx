@@ -7,6 +7,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 use tokio::{fs::File, io::AsyncWriteExt, process};
+use tracing::instrument;
 
 #[derive(Debug, Clone)]
 pub struct Insecure<C> {
@@ -27,6 +28,7 @@ fn get_root_relative(root_path: &PathBuf, path: &Path) -> PathBuf {
 
 #[async_trait]
 impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
+    #[instrument(skip(self))]
     async fn run_command(
         &self,
         command: Command,

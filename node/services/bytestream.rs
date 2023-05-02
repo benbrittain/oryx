@@ -1,6 +1,6 @@
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::error;
+use tracing::{error, instrument};
 
 #[derive(Debug)]
 pub struct BytestreamService {}
@@ -15,6 +15,7 @@ impl BytestreamService {
 impl protos::ByteStream for BytestreamService {
     type ReadStream = ReceiverStream<Result<protos::bytestream::ReadResponse, Status>>;
 
+    #[instrument(skip_all)]
     async fn read(
         &self,
         request: Request<protos::bytestream::ReadRequest>,
@@ -22,6 +23,7 @@ impl protos::ByteStream for BytestreamService {
         todo!();
     }
 
+    #[instrument(skip_all)]
     async fn write(
         &self,
         request: Request<tonic::Streaming<protos::bytestream::WriteRequest>>,
@@ -30,6 +32,7 @@ impl protos::ByteStream for BytestreamService {
         todo!();
     }
 
+    #[instrument(skip_all)]
     async fn query_write_status(
         &self,
         _request: Request<protos::bytestream::QueryWriteStatusRequest>,

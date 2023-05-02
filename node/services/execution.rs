@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::{info, trace};
+use tracing::{info, instrument, trace};
 
 pub static EXEC_OP_METADATA: &'static str =
     "type.googleapis.com/build.bazel.remote.execution.v2.ExecuteOperationMetadata";
@@ -84,6 +84,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
 {
     type ExecuteStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
 
+    #[instrument(skip_all)]
     async fn execute(
         &self,
         request: Request<protos::re::ExecuteRequest>,
@@ -196,6 +197,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
 
     type WaitExecutionStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
 
+    #[instrument(skip_all)]
     async fn wait_execution(
         &self,
         request: Request<protos::re::WaitExecutionRequest>,

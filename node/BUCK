@@ -14,7 +14,7 @@ rust_binary(
         "//third-party/rust:tonic",
         "//third-party/rust:tracing",
         "//third-party/rust:tracing-subscriber",
-        "//third-party/rust:tracing-opentelemetry",
+        "//third-party/rust:tracing-chrome",
         "//third-party/rust:prost",
         "//third-party/rust:prost-types",
         "//common:common",

@@ -1,11 +1,12 @@
 use tonic::{Request, Response, Status};
-use tracing::info;
+use tracing::{info, instrument};
 
 #[derive(Debug, Default)]
 pub struct CapabilitiesService {}
 
 #[tonic::async_trait]
 impl protos::Capabilities for CapabilitiesService {
+    #[instrument(skip_all)]
     async fn get_capabilities(
         &self,
         request: Request<protos::re::GetCapabilitiesRequest>,
