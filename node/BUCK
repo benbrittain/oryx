@@ -36,3 +36,23 @@ rust_library(
         "//execution:execution-engine",
     ],
 )
+
+rust_test(
+    name = "integration_test",
+    srcs = glob(["tests/**/*.rs"]),
+    crate_root = "tests/main.rs",
+    deps = [
+        "//proto:protos",
+        ":node_lib",
+        "//third-party/rust:anyhow",
+        "//third-party/rust:serde",
+        "//third-party/rust:tokio",
+        "//third-party/rust:tokio-stream",
+        "//third-party/rust:tempfile",
+        "//third-party/rust:tower",
+        "//third-party/rust:futures",
+        "//third-party/rust:tonic",
+        "//third-party/rust:prost",
+        "//third-party/rust:prost-types",
+    ],
+)

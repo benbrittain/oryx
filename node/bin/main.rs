@@ -23,8 +23,16 @@ struct Args {
     trace: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct NodeConfig {
+    instance: String,
+    address: std::net::SocketAddr,
+    storage_backend: node_lib::StorageBackend,
+    execution_engine: node_lib::ExecutionEngine,
+}
+
 /// Read the oryx node config
-async fn read_config(config_file: PathBuf) -> Result<node_lib::Config, Box<dyn std::error::Error>> {
+async fn read_config(config_file: PathBuf) -> Result<NodeConfig, Box<dyn std::error::Error>> {
     let mut file = File::open(config_file).await?;
     let mut contents = vec![];
     file.read_to_end(&mut contents).await?;
@@ -50,6 +58,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    node_lib::start_oryx(&config).await?;
+    node_lib::start_oryx(
+        config.instance,
+        node_lib::Connection::Tcp(config.address),
+        config.storage_backend,
+        config.execution_engine,
+    )
+    .await?;
     Ok(())
 }

@@ -23,30 +23,26 @@ pub enum ExecutionEngine {
     Hermetic,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct NodeConfig {
+pub enum Connection {
+    // Default gRPC over TCP
+    Tcp(std::net::SocketAddr),
+    // Unix Domain Socket. Used for testing.
+    Uds(tokio_stream::wrappers::UnixListenerStream),
+}
+
+pub async fn start_oryx(
     instance: String,
-    address: std::net::SocketAddr,
+    conn: Connection,
     storage_backend: StorageBackend,
     execution_engine: ExecutionEngine,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    node: NodeConfig,
-}
-
-pub async fn start_oryx(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let address = &config.node.address;
-    let instance = &config.node.instance;
-    let cas = match &config.node.storage_backend {
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cas = match storage_backend {
         StorageBackend::InMemory => cas::InMemory::default(),
     };
-    let execution_engine =
-        execution_engine::ExecutionEngine::new(match config.node.execution_engine {
-            ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
-            ExecutionEngine::Hermetic => todo!(),
-        });
+    let execution_engine = execution_engine::ExecutionEngine::new(match execution_engine {
+        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
+        ExecutionEngine::Hermetic => todo!(),
+    });
 
     let server = Server::builder()
         .trace_fn(|event| tracing::info_span!("gRPC Request", api = event.uri().path()))
@@ -62,9 +58,16 @@ pub async fn start_oryx(config: &Config) -> Result<(), Box<dyn std::error::Error
             execution_engine,
         )))
         .add_service(OperationsServer::new(OperationsService::new()));
-    server
-        .serve(address.clone())
-        .await?;
-
-    Ok(())
+    let conn = async {
+        match conn {
+            Connection::Tcp(address) => {
+                server.serve(address.clone()).await?;
+            }
+            Connection::Uds(uds_stream) => {
+                server.serve_with_incoming(uds_stream).await?;
+            }
+        }
+        Ok(())
+    };
+    conn.await
 }
