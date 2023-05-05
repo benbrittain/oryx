@@ -1,7 +1,24 @@
 rust_binary(
     name = "node",
-    srcs = glob(["**/*.rs"]),
-    crate_root = "main.rs",
+    srcs = glob(["bin/**/*.rs"]),
+    crate_root = "bin/main.rs",
+    deps = [
+        "//third-party/rust:clap",
+        "//third-party/rust:futures",
+        "//third-party/rust:serde",
+        "//third-party/rust:tokio",
+        "//third-party/rust:toml",
+        "//third-party/rust:tracing",
+        "//third-party/rust:tracing-subscriber",
+        "//third-party/rust:tracing-chrome",
+        ":node_lib",
+    ],
+)
+
+rust_library(
+    name = "node_lib",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
     deps = [
         "//proto:protos",
         "//third-party/rust:anyhow",
@@ -10,11 +27,8 @@ rust_binary(
         "//third-party/rust:serde",
         "//third-party/rust:tokio",
         "//third-party/rust:tokio-stream",
-        "//third-party/rust:toml",
         "//third-party/rust:tonic",
         "//third-party/rust:tracing",
-        "//third-party/rust:tracing-subscriber",
-        "//third-party/rust:tracing-chrome",
         "//third-party/rust:prost",
         "//third-party/rust:prost-types",
         "//common:common",
