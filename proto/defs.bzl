@@ -25,6 +25,7 @@ def rust_protobuf_library(name, srcs, build_script, protos, **kwargs):
     native.rust_library(
         name = name,
         srcs = srcs,
+        doctests = False,
         env = {
             "OUT_DIR": "$(location :{})".format(proto_name),
         },

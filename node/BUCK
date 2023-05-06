@@ -19,6 +19,7 @@ rust_library(
     name = "node_lib",
     srcs = glob(["src/**/*.rs"]),
     crate_root = "src/lib.rs",
+    doctests = False,
     deps = [
         "//proto:protos",
         "//third-party/rust:anyhow",

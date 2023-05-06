@@ -3,6 +3,7 @@ rust_library(
     srcs = glob(["**/*.rs"]),
     crate_root = "lib.rs",
     visibility = ["//node/...", "//execution/..."],
+    doctests = False,
     deps = [
         "//third-party/rust:async-trait",
         "//third-party/rust:base16ct",

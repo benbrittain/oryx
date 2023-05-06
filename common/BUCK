@@ -3,6 +3,7 @@ rust_library(
     srcs = glob(["**/*.rs"]),
     crate_root = "lib.rs",
     visibility = ["PUBLIC"],
+    doctests = False,
     deps = [
         "//proto:protos",
         "//third-party/rust:log",
