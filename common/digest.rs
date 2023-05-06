@@ -25,7 +25,7 @@ impl Digest {
 
 impl std::fmt::Display for Digest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.hash, self.size_bytes)
+        write!(f, "{}:{}", self.hash, self.size_bytes)
     }
 }
 
