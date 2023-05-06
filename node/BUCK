@@ -42,8 +42,9 @@ rust_test(
     srcs = glob(["tests/**/*.rs"]),
     crate_root = "tests/main.rs",
     deps = [
-        "//proto:protos",
         ":node_lib",
+        "//proto:protos",
+        "//common:common",
         "//third-party/rust:anyhow",
         "//third-party/rust:serde",
         "//third-party/rust:tokio",
