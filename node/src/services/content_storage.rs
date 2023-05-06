@@ -59,19 +59,29 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         request: tonic::Request<protos::re::BatchUpdateBlobsRequest>,
     ) -> CasResult<protos::re::BatchUpdateBlobsResponse> {
         use protos::re::batch_update_blobs_response::Response;
-        use protos::rpc::Status;
+        use protos::rpc::{Code, Status};
 
         let mut responses = vec![];
         for request in &request.get_ref().requests {
             let digest = request.digest.clone().unwrap_or_default().into();
-            self.cas
-                .write_blob(digest, &request.data)
-                .await
-                .map_err(|e| tonic::Status::unknown(e.to_string()))?;
-            responses.push(Response {
-                digest: request.digest.clone(),
-                status: Some(Status::default()),
-            });
+            match self.cas.write_blob(digest, &request.data).await {
+                Ok(_) => {
+                    responses.push(Response {
+                        digest: request.digest.clone(),
+                        status: Some(Status::default()),
+                    });
+                }
+                Err(CasError::InvalidDigest(d1, d2)) => {
+                    responses.push(Response {
+                        digest: request.digest.clone(),
+                        status: Some(Status{
+                            code: Code::InvalidArgument.into(),
+                            ..Default::default()
+                        }),
+                    });
+                }
+                Err(e) => return Err(tonic::Status::unknown(e.to_string())),
+            }
         }
 
         let resp = protos::re::BatchUpdateBlobsResponse { responses };

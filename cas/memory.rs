@@ -15,10 +15,20 @@ pub struct InMemory {
 
 #[async_trait]
 impl crate::ContentAddressableStorage for InMemory {
-    async fn write_blob(&self, digest: Digest, data: &[u8]) -> Result<(), CasError> {
+    async fn write_blob(&self, expected_digest: Digest, data: &[u8]) -> Result<(), CasError> {
         let mut cas = self.cas.lock().await;
-        log::info!("write: {}: {:?}", digest, data.len());
-        cas.insert(digest, data.to_vec());
+        log::info!("write: {}: {:?}", expected_digest, data.len());
+
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let hash_buf = hasher.finalize();
+        let hex_hash = base16ct::lower::encode_string(&hash_buf);
+        let actual_digest = Digest::from_str(&format!("{}:{}", hex_hash, data.len())).expect("oh no");
+        if actual_digest != expected_digest {
+            return Err(CasError::InvalidDigest(actual_digest, expected_digest));
+        }
+
+        cas.insert(actual_digest, data.to_vec());
         Ok(())
     }
 

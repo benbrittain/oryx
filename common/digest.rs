@@ -5,7 +5,7 @@ use regex::Regex;
 static DIGEST_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new("([0-9a-f]+):([0-9]+)").expect("Failed to compile digest regex"));
 
-#[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Ord, PartialOrd, Default, PartialEq, Eq, Hash, Debug)]
 pub struct Digest {
     hash: String,
     size_bytes: i64,

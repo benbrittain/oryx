@@ -23,7 +23,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &[
             // TODO take from env var or something
             "build/bazel/remote/execution/v2/remote_execution.proto",
+            "build/bazel/semver/semver.proto",
+            "google/api/annotations.proto",
+            "google/api/client.proto",
+            "google/api/http.proto",
             "google/bytestream/bytestream.proto",
+            "google/longrunning/operations.proto",
+            "google/rpc/code.proto",
+            "google/rpc/status.proto",
         ],
         &["."],
     )?;
