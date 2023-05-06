@@ -1,6 +1,5 @@
 # Oryx Node Configuration
 
-[node]
 instance = ""
 address = "[::1]:8980"
 storage_backend = "memory"
