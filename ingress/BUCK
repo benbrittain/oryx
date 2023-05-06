@@ -1,0 +1,12 @@
+rust_binary(
+    name = "ingress",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/main.rs",
+    deps = [
+        "//third-party/rust:warp",
+        "//third-party/rust:futures",
+        "//third-party/rust:tokio",
+        "//third-party/rust:tracing",
+        "//third-party/rust:tracing-subscriber",
+    ],
+)

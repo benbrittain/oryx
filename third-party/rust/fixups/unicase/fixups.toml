@@ -1,0 +1,2 @@
+cfgs = ["__unicase__iter_cmp", "__unicase__default_hasher", "__unicase__const_fns", "__unicase__core_and_alloc"]
+buildscript = []
