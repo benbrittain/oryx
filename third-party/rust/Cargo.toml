@@ -41,3 +41,8 @@ tracing-chrome = "0.7.1"
 tempfile = "3.5.0"
 tower = "0.4.13"
 warp = "0.3.5"
+yew = { version = "0.20", features = ["csr"] }
+gloo = "0.8.0"
+web-sys = "0.3.61"
+js-sys = "0.3.61"
+wasm-bindgen = "0.2.84"
