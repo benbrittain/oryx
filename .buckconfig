@@ -15,3 +15,13 @@ target_platform_detector_spec = target:root//...->prelude//platforms:default
 
 [project]
 ignore = .git
+
+[buck2_re_client]
+bytestream_address = localhost:8980
+action_cache_address = localhost:8980
+engine_address = localhost:8980
+cas_address = localhost:8980
+tls = false
+
+[build]
+execution_platforms = root//platforms:platforms
