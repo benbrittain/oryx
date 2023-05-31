@@ -1,8 +1,8 @@
+use crate::oryx_test;
 use common::Digest;
 use futures::Future;
 use std::str::FromStr;
 use tonic::Request;
-use crate::oryx_test;
 
 #[tokio::test]
 async fn simple_blob_exists() {
@@ -114,7 +114,10 @@ async fn bad_blob_gives_invalid_argument() {
 
         assert_eq!(
             response_digests,
-            vec![(missing_digest.clone(), protos::rpc::Code::InvalidArgument as i32)]
+            vec![(
+                missing_digest.clone(),
+                protos::rpc::Code::InvalidArgument as i32
+            )]
         );
     })
     .await;

@@ -74,7 +74,7 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
                 Err(CasError::InvalidDigest(d1, d2)) => {
                     responses.push(Response {
                         digest: request.digest.clone(),
-                        status: Some(Status{
+                        status: Some(Status {
                             code: Code::InvalidArgument.into(),
                             ..Default::default()
                         }),

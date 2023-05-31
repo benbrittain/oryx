@@ -6,6 +6,7 @@ use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 
 mod cas;
+mod execute;
 
 pub async fn oryx_test<F, FRet>(client_test_fut: F)
 where

@@ -34,7 +34,7 @@ pub struct DirectoryLayout {
 #[derive(Debug)]
 pub struct ExecuteStatus {
     pub uuid: Uuid,
-    pub action_digest: Digest,
+    pub action_digest: Option<Digest>,
     pub stage: ExecuteStage,
 }
 
@@ -43,6 +43,17 @@ pub enum ExecuteStage {
     Queued,
     Running,
     Done(ExecuteResponse),
+    Error(ExecuteError),
+}
+
+#[derive(Debug)]
+pub enum ExecuteError {
+    /// One or more arguments are invalid.
+    InvalidArgument(String),
+    /// A Blob was not found when setting up the action was requested. The client may be able to fix the errors and retry.
+    BlobNotFound(Digest),
+    /// An internal error occurred in the execution engine or the worker.
+    Internal(String),
 }
 
 #[derive(Debug)]
@@ -76,52 +87,62 @@ impl<B: ExecutionBackend> ExecutionEngine<B> {
         verify_func: impl Fn(Vec<(PathBuf, PathBuf)>) -> Verify + Send + Sync + 'static,
     ) -> Result<mpsc::Receiver<ExecuteStatus>, Error>
     where
-        Exec: Future<Output = anyhow::Result<(Digest, Command, DirectoryLayout)>> + Send,
+        Exec: Future<Output = Result<(Digest, Command, DirectoryLayout), ExecuteError>> + Send,
         Verify: Future<Output = anyhow::Result<Vec<Entry>>> + Send,
     {
         let (tx, rx) = mpsc::channel(32);
         let backend = self.backend.clone();
         let uuid = Uuid::new_v4();
         tokio::spawn(async move {
+            log::info!("================= {uuid} | Start =================");
             // Run the actual command using the backend.
-            let (action_digest, cmd, layout) = setup_func().await?;
+            match setup_func().await {
+                Ok((action_digest, cmd, layout)) => {
+                    log::info!("================= {uuid} | Queued =================");
+                    tx.send(ExecuteStatus {
+                        uuid: uuid,
+                        action_digest: Some(action_digest.clone()),
+                        stage: ExecuteStage::Queued,
+                    })
+                    .await?;
 
-            log::info!("================= {uuid} | Queued =================");
-            tx.send(ExecuteStatus {
-                uuid: uuid,
-                action_digest: action_digest.clone(),
-                stage: ExecuteStage::Queued,
-            })
-            .await?;
+                    // TODO scheduling logic here
+                    log::info!("================= {uuid} | Running =================");
+                    tx.send(ExecuteStatus {
+                        uuid: uuid,
+                        action_digest: Some(action_digest.clone()),
+                        stage: ExecuteStage::Running,
+                    })
+                    .await?;
 
-            // TODO scheduling logic here
-            log::info!("================= {uuid} | Running =================");
-            tx.send(ExecuteStatus {
-                uuid: uuid,
-                action_digest: action_digest.clone(),
-                stage: ExecuteStage::Running,
-            })
-            .await?;
+                    // Run the actual command using the backend.
+                    let mut resp = backend.run_command(cmd, layout).await?;
 
-            // Run the actual command using the backend.
-            let mut resp = backend.run_command(cmd, layout).await?;
+                    log::info!("================= {uuid} | Verifying =================");
+                    let output_paths: Vec<Entry> = verify_func(resp.output_paths).await?;
 
-            log::info!("================= {uuid} | Verifying =================");
-            let output_paths: Vec<Entry> = verify_func(resp.output_paths).await?;
-
-            log::info!("================= {uuid} | Done =================");
-            tx.send(ExecuteStatus {
-                uuid: uuid,
-                action_digest: action_digest.clone(),
-                stage: ExecuteStage::Done(ExecuteResponse {
-                    exit_status: resp.exit_status,
-                    output_paths,
-                    stderr: resp.stderr,
-                    stdout: resp.stdout,
-                }),
-            })
-            .await?;
-
+                    log::info!("================= {uuid} | Done =================");
+                    tx.send(ExecuteStatus {
+                        uuid: uuid,
+                        action_digest: Some(action_digest.clone()),
+                        stage: ExecuteStage::Done(ExecuteResponse {
+                            exit_status: resp.exit_status,
+                            output_paths,
+                            stderr: resp.stderr,
+                            stdout: resp.stdout,
+                        }),
+                    })
+                    .await?;
+                }
+                Err(err) => {
+                    tx.send(ExecuteStatus {
+                        uuid: uuid,
+                        action_digest: None,
+                        stage: ExecuteStage::Error(err),
+                    })
+                    .await?;
+                }
+            }
             // TODO caching logic here
             anyhow::Ok(())
         });

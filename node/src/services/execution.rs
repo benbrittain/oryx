@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Error};
 use cas::ContentAddressableStorage;
-use execution_engine::{Entry, ExecuteStage, ExecuteStatus, ExecutionBackend, ExecutionEngine};
+use execution_engine::{
+    Entry, ExecuteError, ExecuteStage, ExecuteStatus, ExecutionBackend, ExecutionEngine,
+};
 use futures::future::BoxFuture;
 use futures::StreamExt;
 use prost::Message;
@@ -35,15 +37,15 @@ impl<C: ContentAddressableStorage, B> ExecutionService<C, B> {
 pub async fn get_proto<P: prost::Message + Default, C: ContentAddressableStorage>(
     cas: C,
     digest: common::Digest,
-) -> Result<P, Status> {
+) -> Result<P, ExecuteError> {
     let blob = cas
-        .read_blob(digest.into())
+        .read_blob(digest.clone().into())
         .await
-        .map_err(|_| Status::failed_precondition("Failed to fetch blob from CAS."))?;
+        .map_err(|_| ExecuteError::BlobNotFound(digest))?;
     // TODO should return a precondition failure / violation setup here as well.
     // https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L139
     let proto = P::decode(&mut std::io::Cursor::new(blob))
-        .map_err(|_| Status::internal("Failed to decode Action proto: {action_digest}."))?;
+        .map_err(|_| ExecuteError::Internal(format!("Failed to decode Action proto.")))?;
     Ok(proto)
 }
 
@@ -52,7 +54,7 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
     dir: protos::re::Directory,
     cas: C,
     root: PathBuf,
-) -> BoxFuture<'a, Result<(), Error>> {
+) -> BoxFuture<'a, Result<(), ExecuteError>> {
     Box::pin(async move {
         assert_eq!(dir.symlinks.len(), 0);
         for file in dir.files {
@@ -65,10 +67,14 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
             });
         }
         for directory_node in &dir.directories {
-            let node_digest = directory_node.digest.clone().ok_or(anyhow!(
-                "No digest in node for directory: {}",
-                root.display()
-            ))?;
+            let node_digest =
+                directory_node
+                    .digest
+                    .clone()
+                    .ok_or(ExecuteError::Internal(format!(
+                        "No digest in node for directory: {}",
+                        root.display()
+                    )))?;
             let dir: protos::re::Directory = get_proto(cas.clone(), node_digest.into()).await?;
             let mut new_root = root.clone();
             new_root.push(&directory_node.name);
@@ -106,24 +112,27 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                     let cas = cas.clone();
                     async move {
                         let action_digest =
-                            request.action_digest.ok_or(Status::invalid_argument(
-                                "Invalid ExecuteRequest: no action digest specified.",
+                            request.action_digest.ok_or(ExecuteError::InvalidArgument(
+                                String::from("no action digest specified"),
                             ))?;
                         let action: protos::re::Action =
                             get_proto(cas.clone(), action_digest.clone().into()).await?;
                         trace!("{action:#?}");
 
                         let command_digest =
-                            action.command_digest.ok_or(Status::invalid_argument(
-                                "Invalid Action: no command digest specified.",
+                            action.command_digest.ok_or(ExecuteError::InvalidArgument(
+                                String::from("Invalid Action: no command digest specified."),
                             ))?;
                         let command: protos::re::Command =
                             get_proto(cas.clone(), command_digest.into()).await?;
                         trace!("{command:#?}");
 
-                        let root_digest = action.input_root_digest.ok_or(
-                            Status::invalid_argument("Invalid Action: no root digest specified."),
-                        )?;
+                        let root_digest =
+                            action
+                                .input_root_digest
+                                .ok_or(ExecuteError::InvalidArgument(format!(
+                                    "Invalid Action: no root digest specified."
+                                )))?;
                         let root_directory: protos::re::Directory =
                             get_proto(cas.clone(), root_digest.into()).await?;
                         trace!("{root_directory:#?}");
@@ -148,7 +157,9 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                         )
                         .await
                         .map_err(|e| {
-                            Status::unknown(format!("Failed to execute mapping collection: {e}"))
+                            ExecuteError::Internal(format!(
+                                "Failed to execute mapping collection: {e:?}"
+                            ))
                         })?;
 
                         // Collect output path information
@@ -215,9 +226,10 @@ fn convert_to_op(
             ExecuteStage::Queued => protos::re::execution_stage::Value::Queued,
             ExecuteStage::Running => protos::re::execution_stage::Value::Executing,
             ExecuteStage::Done(_) => protos::re::execution_stage::Value::Completed,
+            ExecuteStage::Error(_) => protos::re::execution_stage::Value::Unknown,
         }
         .into(),
-        action_digest: Some(exec_status.action_digest.into()),
+        action_digest: exec_status.action_digest.map(|ad| ad.into()),
         // TODO stream metadata
         stdout_stream_name: String::from(""),
         stderr_stream_name: String::from(""),
@@ -226,6 +238,34 @@ fn convert_to_op(
     let (done, result) = match exec_status.stage {
         ExecuteStage::Queued => (false, None),
         ExecuteStage::Running => (false, None),
+        ExecuteStage::Error(status) => {
+            let status = match status {
+                ExecuteError::InvalidArgument(info) => protos::rpc::Status {
+                    code: protos::rpc::Code::InvalidArgument.into(),
+                    ..Default::default()
+                },
+                ExecuteError::BlobNotFound(blob) => todo!(),
+                ExecuteError::Internal(info) => todo!(),
+            };
+
+            let response = protos::re::ExecuteResponse {
+                // If the status has a code other than `OK`, it indicates that the action did
+                // not finish execution. For example, if the operation times out during
+                // execution, the status will have a `DEADLINE_EXCEEDED` code. Servers MUST
+                // use this field for errors in execution, rather than the error field on the
+                // `Operation` object.
+                result: None,
+                // If the status code is other than `OK`, then the result MUST NOT be cached.
+                // For an error status, the `result` field is optional; the server may
+                // populate the output-, stdout-, and stderr-related fields if it has any
+                // information available, such as the stdout and stderr of a timed-out action.
+                cached_result: false,
+                status: Some(status),
+                server_logs: HashMap::new(),
+                message: String::from(""),
+            };
+            (true, Some(response))
+        }
         ExecuteStage::Done(resp) => {
             let execution_metadata = protos::re::ExecutedActionMetadata {
                 ..Default::default()
@@ -285,6 +325,10 @@ fn convert_to_op(
             type_url: EXEC_OP_METADATA.to_string(),
             value: metadata.encode_to_vec(),
         }),
+        // Errors discovered during creation of the `Operation` will be reported
+        // as gRPC Status errors, while errors that occurred while running the
+        // action will be reported in the `status` field of the `ExecuteResponse`. The
+        // server MUST NOT set the `error` field of the `Operation` proto.
         result: result.map(|result| {
             // There should never be a scenario where we are attempting to return a response
             // to an unfinished execution.

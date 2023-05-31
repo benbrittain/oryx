@@ -56,5 +56,6 @@ rust_test(
         "//third-party/rust:tonic",
         "//third-party/rust:prost",
         "//third-party/rust:prost-types",
+        "//third-party/rust:tracing",
     ],
 )
