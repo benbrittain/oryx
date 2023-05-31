@@ -1,11 +1,14 @@
 use crate::oryx_test;
 use common::Digest;
-use futures::Future;
 use prost::Message;
 use protos::{
     longrunning::operation::Result::Response,
+    re::batch_update_blobs_request::Request as BlobRequest,
+    re::batch_update_blobs_response::Response as BlobResponse,
     rpc::{Code, Status},
 };
+use sha2::{Digest as _, Sha256};
+use std::future::{ready, Future, IntoFuture, Ready};
 use std::str::FromStr;
 use tokio_stream::StreamExt;
 use tonic::Request;
@@ -37,10 +40,47 @@ async fn invalid_no_action_digest() {
                 Message::decode(result.value.as_slice()).unwrap();
             let status = resp.status.unwrap();
 
-            // Should fail with invalid argemnt since no action digest was passed.
+            // Should fail with invalid argument since no action digest was passed.
             assert_eq!(status.code, Code::InvalidArgument.into());
         }
 
+        assert!(got_response);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn blob_precondition_failure() {
+    let missing_digest: protos::re::Digest = Digest::from_str("aaaa:5").unwrap().into();
+    let mut got_response = false;
+
+    oryx_test(|channel| async move {
+        let mut exec_client = protos::ExecutionClient::new(channel.clone());
+        let mut cas_client = protos::ContentAddressableStorageClient::new(channel);
+
+        let mut response = exec_client
+            .execute(Request::new(protos::re::ExecuteRequest {
+                instance_name: "".to_string(),
+                action_digest: Some(missing_digest.into()),
+                execution_policy: None,
+                results_cache_policy: None,
+                skip_cache_lookup: false,
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        while let Some(op) = response.next().await {
+            got_response = true;
+            let op = op.unwrap();
+            assert!(op.name.starts_with("operations/"));
+            let Response(result) = op.result.unwrap() else { todo!() };
+            let resp: protos::re::ExecuteResponse =
+                Message::decode(result.value.as_slice()).unwrap();
+            let status = resp.status.unwrap();
+
+            // Should fail with Failed Precondition since the fake action digest was never uploaded
+            assert_eq!(status.code, Code::FailedPrecondition.into());
+        }
         assert!(got_response);
     })
     .await;

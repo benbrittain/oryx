@@ -17,6 +17,8 @@ pub static EXEC_OP_METADATA: &'static str =
     "type.googleapis.com/build.bazel.remote.execution.v2.ExecuteOperationMetadata";
 pub static EXEC_RESP: &'static str =
     "type.googleapis.com/build.bazel.remote.execution.v2.ExecuteResponse";
+pub static PRECONDITION_FAILURE: &'static str =
+    "type.googleapis.com/com.google.rpc.PreconditionFailure";
 
 pub struct ExecutionService<C, B> {
     instance: String,
@@ -242,9 +244,33 @@ fn convert_to_op(
             let status = match status {
                 ExecuteError::InvalidArgument(info) => protos::rpc::Status {
                     code: protos::rpc::Code::InvalidArgument.into(),
+                    message: format!("Invalid Argument: {info}"),
                     ..Default::default()
                 },
-                ExecuteError::BlobNotFound(blob) => todo!(),
+                ExecuteError::BlobNotFound(blob) => {
+                    // In the case of a missing input or command, the server SHOULD additionally
+                    // send a [PreconditionFailure][google.rpc.PreconditionFailure] error detail
+                    // where, for each requested blob not present in the CAS, there is a
+                    // `Violation` with a `type` of `MISSING` and a `subject` of
+                    // `"blobs/{hash}/{size}"` indicating the digest of the missing blob.
+                    let hash = blob.hash();
+                    let size = blob.size_bytes();
+                    let precondition = protos::rpc::PreconditionFailure {
+                        violations: vec![protos::rpc::precondition_failure::Violation {
+                            r#type: String::from("MISSING"),
+                            subject: format!("blobs/{hash}/{size}"),
+                            description: String::from("blob not found"),
+                        }],
+                    };
+                    protos::rpc::Status {
+                        code: protos::rpc::Code::FailedPrecondition.into(),
+                        message: format!("{blob} not found"),
+                        details: vec![prost_types::Any {
+                            type_url: PRECONDITION_FAILURE.to_string(),
+                            value: precondition.encode_to_vec(),
+                        }],
+                    }
+                }
                 ExecuteError::Internal(info) => todo!(),
             };
 

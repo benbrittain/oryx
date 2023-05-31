@@ -14,11 +14,11 @@ pub struct Digest {
 // Intentionally using getters so that Digest creation is forced through
 // the validation logic in FromStr.
 impl Digest {
-    fn hash(&self) -> &str {
+    pub fn hash(&self) -> &str {
         &self.hash
     }
 
-    fn size_bytes(&self) -> i64 {
+    pub fn size_bytes(&self) -> i64 {
         self.size_bytes
     }
 }

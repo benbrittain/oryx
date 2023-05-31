@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "google/longrunning/operations.proto",
             "google/rpc/code.proto",
             "google/rpc/status.proto",
+            "google/rpc/error_details.proto",
         ],
         &["."],
     )?;

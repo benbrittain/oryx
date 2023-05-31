@@ -57,5 +57,7 @@ rust_test(
         "//third-party/rust:prost",
         "//third-party/rust:prost-types",
         "//third-party/rust:tracing",
+        "//third-party/rust:sha2",
+        "//third-party/rust:base16ct",
     ],
 )

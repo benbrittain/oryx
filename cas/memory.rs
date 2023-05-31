@@ -34,8 +34,7 @@ impl crate::ContentAddressableStorage for InMemory {
 
     async fn read_blob(&self, digest: Digest) -> Result<Vec<u8>, CasError> {
         let cas = self.cas.lock().await;
-        let data = cas.get(&digest).expect("nth");
-        //            .ok_or_else(|| CasError::BlobNotFound(digest.clone()))?;
+        let data = cas.get(&digest).ok_or_else(|| CasError::BlobNotFound(digest.clone()))?;
         log::info!("read: {}: {:?}", digest, data);
         Ok(data.to_vec())
     }
