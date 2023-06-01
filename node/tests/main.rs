@@ -5,6 +5,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 
+mod gemsbok;
 mod cas;
 mod execute;
 
