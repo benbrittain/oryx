@@ -43,11 +43,9 @@ pub async fn get_proto<P: prost::Message + Default, C: ContentAddressableStorage
     let blob = cas
         .read_blob(digest.clone().into())
         .await
-        .map_err(|_| ExecuteError::BlobNotFound(digest))?;
-    // TODO should return a precondition failure / violation setup here as well.
-    // https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L139
+        .map_err(|_| ExecuteError::BlobNotFound(digest.clone()))?;
     let proto = P::decode(&mut std::io::Cursor::new(blob))
-        .map_err(|_| ExecuteError::Internal(format!("Failed to decode Action proto.")))?;
+        .map_err(|_| ExecuteError::InvalidArgument(format!("{digest} was not a valid proto")))?;
     Ok(proto)
 }
 
@@ -63,7 +61,12 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
             let mut path = root.clone();
             path.push(&file.name);
             mapping.files.push(execution_engine::Entry {
-                digest: file.digest.unwrap().into(),
+                digest: file
+                    .digest
+                    .ok_or(ExecuteError::InvalidArgument(String::from(
+                        "no digest in entry",
+                    )))?
+                    .into(),
                 path,
                 executable: file.is_executable,
             });
@@ -247,14 +250,14 @@ fn convert_to_op(
                     message: format!("Invalid Argument: {info}"),
                     ..Default::default()
                 },
-                ExecuteError::BlobNotFound(blob) => {
+                ExecuteError::BlobNotFound(digest) => {
                     // In the case of a missing input or command, the server SHOULD additionally
                     // send a [PreconditionFailure][google.rpc.PreconditionFailure] error detail
                     // where, for each requested blob not present in the CAS, there is a
                     // `Violation` with a `type` of `MISSING` and a `subject` of
                     // `"blobs/{hash}/{size}"` indicating the digest of the missing blob.
-                    let hash = blob.hash();
-                    let size = blob.size_bytes();
+                    let hash = digest.hash();
+                    let size = digest.size_bytes();
                     let precondition = protos::rpc::PreconditionFailure {
                         violations: vec![protos::rpc::precondition_failure::Violation {
                             r#type: String::from("MISSING"),
@@ -264,14 +267,18 @@ fn convert_to_op(
                     };
                     protos::rpc::Status {
                         code: protos::rpc::Code::FailedPrecondition.into(),
-                        message: format!("{blob} not found"),
+                        message: format!("{digest} not found"),
                         details: vec![prost_types::Any {
                             type_url: PRECONDITION_FAILURE.to_string(),
                             value: precondition.encode_to_vec(),
                         }],
                     }
                 }
-                ExecuteError::Internal(info) => todo!(),
+                ExecuteError::Internal(info) => protos::rpc::Status {
+                    code: protos::rpc::Code::Internal.into(),
+                    message: format!("Internal Failure: {info}."),
+                    ..Default::default()
+                },
             };
 
             let response = protos::re::ExecuteResponse {
