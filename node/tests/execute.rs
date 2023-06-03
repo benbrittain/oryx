@@ -107,3 +107,26 @@ async fn basic_req() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn basic_req_with_file() {
+    oryx_test(|channel| async move {
+        let mut client = Gemsbok::new(channel);
+        let command_digest = client
+            .add_command(&["/bin/sh", "-c", "ls > out.txt"], &["out.txt"])
+            .await
+            .unwrap();
+        let root_dir_digest = client.add_directory(Directory::root().file("file0.txt", b"0")).await.unwrap();
+        let action_digest = client
+            .add_action(command_digest, root_dir_digest)
+            .await
+            .unwrap();
+        let result = client.execute(action_digest).await.unwrap();
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(
+            result.directory,
+            Directory::root().file("out.txt", b"file0.txt\nout.txt\n")
+        );
+    })
+    .await;
+}
