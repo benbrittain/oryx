@@ -8,6 +8,7 @@ use futures::StreamExt;
 use prost::Message;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
@@ -23,11 +24,11 @@ pub static PRECONDITION_FAILURE: &'static str =
 pub struct ExecutionService<C, B> {
     instance: String,
     cas: C,
-    engine: ExecutionEngine<B>,
+    engine: ExecutionEngine<B, C>,
 }
 
 impl<C: ContentAddressableStorage, B> ExecutionService<C, B> {
-    pub fn new(instance: &str, cas: C, engine: ExecutionEngine<B>) -> Self {
+    pub fn new(instance: &str, cas: C, engine: ExecutionEngine<B, C>) -> Self {
         ExecutionService {
             instance: instance.to_string(),
             cas,
@@ -60,7 +61,7 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
         for file in dir.files {
             let mut path = root.clone();
             path.push(&file.name);
-            mapping.files.push(execution_engine::Entry {
+            mapping.entries.push(execution_engine::Entry::File {
                 digest: file
                     .digest
                     .ok_or(ExecuteError::InvalidArgument(String::from(
@@ -111,99 +112,88 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
         let cas2 = self.cas.clone();
         let mut exec_events = self
             .engine
-            .execute(
-                move || {
-                    let request = request.clone();
-                    let cas = cas.clone();
-                    async move {
-                        let action_digest =
-                            request.action_digest.ok_or(ExecuteError::InvalidArgument(
-                                String::from("no action digest specified"),
-                            ))?;
-                        let action: protos::re::Action =
-                            get_proto(cas.clone(), action_digest.clone().into()).await?;
-                        trace!("{action:#?}");
+            .execute(move || {
+                let request = request.clone();
+                let cas = cas.clone();
+                async move {
+                    let action_digest = request.action_digest.ok_or(
+                        ExecuteError::InvalidArgument(String::from("no action digest specified")),
+                    )?;
+                    let action: protos::re::Action =
+                        get_proto(cas.clone(), action_digest.clone().into()).await?;
+                    trace!("{action:#?}");
 
-                        let command_digest =
-                            action.command_digest.ok_or(ExecuteError::InvalidArgument(
-                                String::from("Invalid Action: no command digest specified."),
-                            ))?;
-                        let command: protos::re::Command =
-                            get_proto(cas.clone(), command_digest.into()).await?;
-                        trace!("{command:#?}");
+                    let command_digest =
+                        action.command_digest.ok_or(ExecuteError::InvalidArgument(
+                            String::from("Invalid Action: no command digest specified."),
+                        ))?;
+                    let command: protos::re::Command =
+                        get_proto(cas.clone(), command_digest.into()).await?;
+                    trace!("{command:#?}");
 
-                        let root_digest =
-                            action
-                                .input_root_digest
-                                .ok_or(ExecuteError::InvalidArgument(format!(
-                                    "Invalid Action: no root digest specified."
-                                )))?;
-                        let root_directory: protos::re::Directory =
-                            get_proto(cas.clone(), root_digest.into()).await?;
-                        trace!("{root_directory:#?}");
+                    let root_digest =
+                        action
+                            .input_root_digest
+                            .ok_or(ExecuteError::InvalidArgument(format!(
+                                "Invalid Action: no root digest specified."
+                            )))?;
+                    let root_directory: protos::re::Directory =
+                        get_proto(cas.clone(), root_digest.into()).await?;
+                    trace!("{root_directory:#?}");
 
-                        // Collect a command for the execution engine
-                        let cmd = execution_engine::Command {
-                            arguments: command.arguments,
-                            env_vars: command
-                                .environment_variables
-                                .iter()
-                                .map(|ev| (ev.name.clone(), ev.value.clone()))
-                                .collect(),
-                        };
+                    // Collect a command for the execution engine
+                    let cmd = execution_engine::Command {
+                        arguments: command.arguments,
+                        env_vars: command
+                            .environment_variables
+                            .iter()
+                            .map(|ev| (ev.name.clone(), ev.value.clone()))
+                            .collect(),
+                    };
 
-                        // Collect the filesystem information for the execution engine
-                        let mut dir_layout = execution_engine::DirectoryLayout::default();
-                        create_mapping(
-                            &mut dir_layout,
-                            root_directory,
-                            cas.clone(),
-                            PathBuf::default(),
-                        )
-                        .await
-                        .map_err(|e| {
-                            ExecuteError::Internal(format!(
-                                "Failed to execute mapping collection: {e:?}"
-                            ))
-                        })?;
+                    // Collect the filesystem information for the execution engine
+                    let mut dir_layout = execution_engine::DirectoryLayout::default();
+                    create_mapping(
+                        &mut dir_layout,
+                        root_directory,
+                        cas.clone(),
+                        PathBuf::default(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        ExecuteError::Internal(format!(
+                            "Failed to execute mapping collection: {e:?}"
+                        ))
+                    })?;
+                    dbg!(&dir_layout);
 
-                        // Collect output path information
-                        if !command.output_paths.is_empty() {
-                            for path in command.output_paths {
-                                dir_layout.output_paths.push(path.into());
-                            }
-                        } else {
-                            todo!();
-                        };
-
-                        Ok((action_digest.into(), cmd, dir_layout))
+                    if !command.output_directories.is_empty() || !command.output_files.is_empty() {
+                        return Err(ExecuteError::InvalidArgument(format!(
+                            "Only RBE v2.1+ Supported. Use output_paths"
+                        )));
                     }
-                },
-                move |output_paths| {
-                    let cas = cas2.clone();
-                    async move {
-                        info!("## Verifying ## ");
-                        let mut entries = vec![];
 
-                        for (entry_path, file_path) in output_paths {
-                            let digest = cas.add_from_file(&file_path).await?;
-                            entries.push(Entry {
-                                path: entry_path,
-                                digest,
-                                executable: false,
-                            });
-                        }
-                        Ok(entries)
+                    // Collect output path information
+                    if command.output_paths.is_empty() {
+                        return Err(ExecuteError::InvalidArgument(format!(
+                            "No output_paths were specified."
+                        )));
                     }
-                },
-            )
+                    for path in command.output_paths {
+                        dir_layout.output_paths.push(path.into());
+                    }
+
+                    Ok((action_digest.into(), cmd, dir_layout))
+                }
+            })
             .map_err(|e| Status::unknown(format!("Failed to execute: {e}")))?;
 
         // TODO is there an easy way to map over this instead of making another channel?
         let (tx, rx) = mpsc::channel(32);
         while let Some(event) = exec_events.recv().await {
             info!("{:?}", event);
-            tx.send(convert_to_op(event))
+            let op = convert_to_op(event);
+            tx.send(op)
                 .await
                 .map_err(|e| Status::unknown(format!("Failed to execute command: {e}")))?;
         }
@@ -304,21 +294,38 @@ fn convert_to_op(
                 ..Default::default()
             };
 
-            // Collect output files from the finished execution
+            // Collect outputs from the finished execution
             let mut output_files = vec![];
+            let mut output_directories = vec![];
             for entry in resp.output_paths {
-                output_files.push(protos::re::OutputFile {
-                    path: entry.path.display().to_string(),
-                    digest: Some(entry.digest.into()),
-                    is_executable: entry.executable,
-                    // The contents of the file if inlining was requested. The server SHOULD NOT inline
-                    // file contents unless requested by the client in the
-                    // [GetActionResultRequest][build.bazel.remote.execution.v2.GetActionResultRequest]
-                    // message. The server MAY omit inlining, even if requested, and MUST do so if inlining
-                    // would cause the response to exceed message size limits.
-                    contents: vec![],
-                    node_properties: None,
-                });
+                match entry {
+                    Entry::File {
+                        path,
+                        digest,
+                        executable,
+                    } => {
+                        output_files.push(protos::re::OutputFile {
+                            path: path.display().to_string(),
+                            digest: Some(digest.into()),
+                            is_executable: executable,
+                            // The contents of the file if inlining was requested. The server
+                            // SHOULD NOT inline file contents unless requested by the client in
+                            // the [GetActionResultRequest][build.bazel.remote.execution.v2.GetActionResultRequest]
+                            // message. The server MAY omit inlining, even if requested, and MUST do so if inlining
+                            // would cause the response to exceed message size limits.
+                            contents: vec![],
+                            node_properties: None,
+                        });
+                    }
+                    Entry::Directory { path, digest } => {
+                        assert!(path.is_relative());
+                        output_directories.push(protos::re::OutputDirectory {
+                            path: path.display().to_string(),
+                            tree_digest: Some(digest.into()),
+                            is_topologically_sorted: false,
+                        });
+                    }
+                }
             }
 
             info!("output: {:#?}", output_files);
@@ -328,7 +335,7 @@ fn convert_to_op(
                     output_files,
                     output_file_symlinks: vec![],
                     output_symlinks: vec![],
-                    output_directories: vec![],
+                    output_directories,
                     output_directory_symlinks: vec![],
                     exit_code: resp.exit_status,
                     execution_metadata: Some(execution_metadata),

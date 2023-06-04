@@ -17,5 +17,12 @@ rust_library(
         "//third-party/rust:tokio",
         "//third-party/rust:openat2",
         "//third-party/rust:uuid",
+        "//third-party/rust:futures",
+
+        # I don't like having this dependency here. Only use OutputDirectory
+        # from this. It's needed because the CAS stores it's Directory info
+        # in the form of a proto.
+        "//proto:protos",
+        "//third-party/rust:prost",
     ],
 )

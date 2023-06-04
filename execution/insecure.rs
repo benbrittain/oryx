@@ -1,11 +1,14 @@
 use crate::*;
 use anyhow::{anyhow, Error};
 use cas::ContentAddressableStorage;
+use futures::future::{BoxFuture, FutureExt};
 use openat2::*;
+use prost::Message;
 use std::os::fd::RawFd;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
+use tokio::io::AsyncReadExt;
 use tokio::{fs::File, io::AsyncWriteExt, process};
 use tracing::instrument;
 
@@ -18,10 +21,66 @@ impl<C: ContentAddressableStorage> Insecure<C> {
     pub fn new(cas: C) -> Result<Self, Error> {
         Ok(Insecure { cas })
     }
+
+    async fn add_file(&self, root_path: &Path, path: &Path) -> Result<Entry, Error> {
+        let mut file = tokio::fs::File::open(&path).await?;
+        let mut buf = vec![];
+        file.read_to_end(&mut buf).await?;
+        let digest = self.cas.write_blob(&buf, None).await?;
+        Ok(Entry::File {
+            path: path.strip_prefix(&root_path).unwrap().to_path_buf(),
+            digest,
+            executable: false,
+        })
+    }
+
+    fn add_dir<'a>(
+        &'a self,
+        root_path: &'a Path,
+        path: &'a Path,
+        children: &'a mut Vec<protos::re::Directory>,
+    ) -> BoxFuture<'a, Result<protos::re::Directory, Error>> {
+        Box::pin(async move {
+            let mut files = vec![];
+            let mut directories = vec![];
+
+            for entry in std::fs::read_dir(path)? {
+                let entry = entry?;
+                dbg!(&entry.path());
+                if entry.path().is_file() {
+                    let Entry::File{path, digest, executable} = self.add_file(root_path, &entry.path()).await? else { unreachable!() };
+                    files.push(protos::re::FileNode {
+                        name: entry.file_name().to_str().unwrap().to_string(),
+                        digest: Some(digest.into()),
+                        is_executable: executable,
+                        node_properties: None,
+                    })
+                } else if entry.path().is_dir() {
+                    let dir = self.add_dir(root_path, &entry.path(), children).await?;
+                    children.push(dir.clone());
+                    let proto_buf = dir.encode_to_vec();
+                    let digest = self.cas.write_blob(&proto_buf, None).await?;
+                    directories.push(protos::re::DirectoryNode {
+                        name: entry.file_name().to_str().unwrap().to_string(),
+                        digest: Some(digest.into()),
+                    })
+                } else {
+                    unreachable!();
+                }
+            }
+
+            Ok(dbg!(protos::re::Directory {
+                files,
+                directories,
+                symlinks: vec![],
+                node_properties: None,
+            }))
+        })
+    }
 }
 
-fn get_root_relative(root_path: &PathBuf, path: &Path) -> PathBuf {
-    let mut new_path: PathBuf = root_path.clone();
+fn get_root_relative(root_path: &Path, path: &Path) -> PathBuf {
+    let mut new_path: PathBuf = root_path.to_path_buf();
     new_path.push(path);
     new_path
 }
@@ -33,27 +92,35 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         &self,
         command: Command,
         dir: DirectoryLayout,
-    ) -> Result<CommandResponse, Error> {
+    ) -> Result<ExecuteResponse, Error> {
         log::info!("{command:#?}");
-        log::info!("{dir:#?}");
 
         // Create a temporary directory and write all files from the cas there
         let tmp_dir = TempDir::new("oryx-insecure")?;
         let root_path = tmp_dir.path().to_path_buf();
         log::info!("Insecure directory: {root_path:#?}");
-        for entry in dir.files {
-            let path = get_root_relative(&root_path, &entry.path);
-            if let Some(prefix) = path.parent() {
-                std::fs::create_dir_all(prefix)?;
+        for entry in dir.entries {
+            let path = get_root_relative(&root_path, &entry.get_path());
+            match entry {
+                Entry::Directory { .. } => {
+                    std::fs::create_dir_all(path)?;
+                }
+                Entry::File {
+                    digest, executable, ..
+                } => {
+                    if let Some(prefix) = path.parent() {
+                        std::fs::create_dir_all(prefix)?;
+                    }
+                    let mut file = File::create(&path).await?;
+                    eprintln!("entry: {path:#?}");
+                    log::info!("digest: {}", digest);
+                    let data = self.cas.read_blob(digest).await?;
+                    eprintln!("data length: {}", data.len());
+                    eprintln!("file: {file:?}");
+                    file.write_all(&data).await?;
+                    file.flush().await?;
+                }
             }
-            let mut file = File::create(&path).await?;
-            log::info!("entry: {path:#?}");
-            log::info!("digest: {}", entry.digest);
-            let data = self.cas.read_blob(entry.digest).await?;
-            log::info!("data length: {}", data.len());
-            log::info!("file: {file:?}");
-            file.write_all(&data).await?;
-            file.flush().await?;
         }
 
         let binary = &command.arguments[0];
@@ -67,21 +134,36 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
             .await?;
 
         // Verify outputs were created and get their hash
-        let mut output_paths = vec![];
+        let mut entries = vec![];
         for path in dir.output_paths {
-            let local_path = get_root_relative(&root_path, &path);
-            if local_path.exists() {
-                output_paths.push((path, local_path));
+            let global_path = get_root_relative(&root_path, &path);
+            let mut children = vec![];
+            if global_path.is_dir() {
+                let root = self
+                    .add_dir(&root_path, &global_path, &mut children)
+                    .await?;
+                let tree = protos::re::Tree {
+                    root: Some(root),
+                    children,
+                };
+                let proto_buf = tree.encode_to_vec();
+                let digest = self.cas.write_blob(&proto_buf, None).await?;
+                entries.push(Entry::Directory { path, digest });
+            } else if global_path.is_file() {
+                entries.push(self.add_file(&root_path, &global_path).await?);
+            } else {
+                panic!("path of unknown type");
             }
         }
 
         // TODO Remove this!
+        // Only here so I can look in the insecure folders in /tmp during testing.
         std::mem::forget(tmp_dir);
 
         log::info!("Command Output: {output:?}");
-        Ok(CommandResponse {
+        Ok(ExecuteResponse {
             exit_status: output.status.code().unwrap(),
-            output_paths,
+            output_paths: entries,
             stderr: output.stderr,
             stdout: output.stdout,
         })

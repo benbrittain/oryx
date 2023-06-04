@@ -1,3 +1,4 @@
+use crate::gemsbok::*;
 use crate::oryx_test;
 use common::Digest;
 use prost::Message;
@@ -8,10 +9,10 @@ use protos::{
     rpc::{Code, Status},
 };
 use std::future::{ready, Future, IntoFuture, Ready};
+use std::path::PathBuf;
 use std::str::FromStr;
 use tokio_stream::StreamExt;
 use tonic::Request;
-use crate::gemsbok::*;
 
 #[tokio::test]
 async fn invalid_no_action_digest() {
@@ -100,33 +101,71 @@ async fn basic_req() {
             .unwrap();
         let result = client.execute(action_digest).await.unwrap();
         assert_eq!(result.exit_code, 0);
-        assert_eq!(
-            result.directory,
-            Directory::root().file("out.txt", b"magic\n")
-        );
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("out.txt"), Some(b"magic\n"));
+        assert_eq!(result.directory, expected_directory,);
     })
     .await;
 }
 
 #[tokio::test]
-async fn basic_req_with_file() {
+async fn basic_req_with_file_output() {
     oryx_test(|channel| async move {
         let mut client = Gemsbok::new(channel);
         let command_digest = client
             .add_command(&["/bin/sh", "-c", "ls > out.txt"], &["out.txt"])
             .await
             .unwrap();
-        let root_dir_digest = client.add_directory(Directory::root().file("file0.txt", b"0")).await.unwrap();
+        let mut root_dir = Directory::root();
+        root_dir.add_path(&PathBuf::from("file0.txt"), Some(b"0\n"));
+        let root_dir_digest = client.add_directory(root_dir).await.unwrap();
         let action_digest = client
             .add_action(command_digest, root_dir_digest)
             .await
             .unwrap();
         let result = client.execute(action_digest).await.unwrap();
         assert_eq!(result.exit_code, 0);
-        assert_eq!(
-            result.directory,
-            Directory::root().file("out.txt", b"file0.txt\nout.txt\n")
-        );
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("out.txt"), Some(b"file0.txt\nout.txt\n"));
+
+        assert_eq!(result.directory, expected_directory,);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn basic_req_with_dir_output() {
+    oryx_test(|channel| async move {
+        let mut client = Gemsbok::new(channel);
+        let command_digest = client
+            .add_command(
+                &[
+                    "/bin/sh",
+                    "-c",
+                    "mkdir -p a/b/dir/foo; \
+                    echo 'bar bar bar' > a/b/dir/bar; \
+                    echo 'baz baz baz' > a/b/dir/foo/baz; \
+                ",
+                ],
+                &["a/b/dir"],
+            )
+            .await
+            .unwrap();
+        let root_dir_digest = client.add_directory(Directory::root()).await.unwrap();
+        let action_digest = client
+            .add_action(command_digest, root_dir_digest)
+            .await
+            .unwrap();
+        let result = client.execute(action_digest).await.unwrap();
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("a/b/dir/bar"), Some(b"bar bar bar\n"));
+        expected_directory.add_path(&PathBuf::from("a/b/dir/foo/baz"), Some(b"baz baz baz\n"));
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.directory, expected_directory,);
     })
     .await;
 }

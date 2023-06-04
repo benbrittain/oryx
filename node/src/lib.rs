@@ -36,10 +36,13 @@ pub async fn start_oryx(
     let cas = match storage_backend {
         StorageBackend::InMemory => cas::InMemory::default(),
     };
-    let execution_engine = execution_engine::ExecutionEngine::new(match execution_engine {
-        ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
-        ExecutionEngine::Hermetic => todo!(),
-    });
+    let execution_engine = execution_engine::ExecutionEngine::new(
+        match execution_engine {
+            ExecutionEngine::Insecure => execution_engine::insecure::Insecure::new(cas.clone())?,
+            ExecutionEngine::Hermetic => todo!(),
+        },
+        cas.clone(),
+    );
 
     let server = Server::builder()
         .trace_fn(|event| tracing::info_span!("gRPC Request", api = event.uri().path()))

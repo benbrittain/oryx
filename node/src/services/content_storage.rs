@@ -64,7 +64,7 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         let mut responses = vec![];
         for request in &request.get_ref().requests {
             let digest = request.digest.clone().unwrap_or_default().into();
-            match self.cas.write_blob(digest, &request.data).await {
+            match self.cas.write_blob(&request.data, Some(digest)).await {
                 Ok(_) => {
                     responses.push(Response {
                         digest: request.digest.clone(),

@@ -5,9 +5,9 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 
-mod gemsbok;
 mod cas;
 mod execute;
+mod gemsbok;
 
 pub async fn oryx_test<F, FRet>(client_test_fut: F)
 where

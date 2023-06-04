@@ -1,5 +1,6 @@
 use anyhow::Error;
 use common::Digest;
+use futures::future::BoxFuture;
 use prost::Message;
 use protos::{
     longrunning::operation::Result::Response,
@@ -7,6 +8,7 @@ use protos::{
     ExecutionClient,
 };
 use sha2::{Digest as _, Sha256};
+use std::collections::VecDeque;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -112,7 +114,7 @@ impl Gemsbok {
             let Response(result) = op.result.unwrap() else { todo!() };
             let resp: protos::re::ExecuteResponse =
                 Message::decode(result.value.as_slice()).unwrap();
-            let status = resp.status.unwrap();
+            let status = dbg!(resp.status.unwrap());
 
             // Should succeed
             assert_eq!(status.code, protos::rpc::Code::Ok.into());
@@ -126,10 +128,19 @@ impl Gemsbok {
             let stdout = std::str::from_utf8(&resp.stdout_raw)?;
 
             let mut directory = Directory::root();
-            for file in resp.output_files {
+            for file in dbg!(resp.output_files) {
                 let path = PathBuf::from(file.path);
                 let contents = self.get_blob(file.digest.unwrap().into()).await?;
-                directory.add_file(&path, &contents);
+                directory.add_path(&path, Some(&contents));
+            }
+
+            for dir in resp.output_directories {
+                let root_path = PathBuf::from(dir.path);
+                let tree: protos::re::Tree = self
+                    .download_proto(dir.tree_digest.clone().unwrap().into())
+                    .await?;
+                let root = tree.root.clone().unwrap();
+                self.add_dir(&mut directory, &root_path, &root).await?;
             }
 
             // TODO other output response fields
@@ -141,7 +152,38 @@ impl Gemsbok {
                 directory,
             });
         }
-        Err(anyhow::anyhow!("invalid"))
+        Err(anyhow::anyhow!("Gemsbok execute exited uncleanly!"))
+    }
+
+    fn add_dir<'a>(
+        &'a mut self,
+        dir: &'a mut Directory,
+        path: &'a Path,
+        sub_dir: &'a protos::re::Directory,
+    ) -> BoxFuture<'a, Result<(), Error>> {
+        Box::pin(async move {
+            for file_node in &sub_dir.files {
+                dbg!(&file_node);
+                let mut file_path = path.to_path_buf();
+                file_path.push(&file_node.name);
+                dbg!(&file_path);
+                let digest = file_node.digest.clone().unwrap();
+                let contents = self.get_blob(digest.into()).await?;
+                dir.add_path(&file_path, Some(&contents));
+            }
+
+            for dir_node in &sub_dir.directories {
+                let digest = dir_node.digest.clone().unwrap();
+                let child_dir = self.download_proto(digest.into()).await?;
+
+                let mut dir_path = path.to_path_buf();
+                dir_path.push(&dir_node.name);
+                dbg!(&dir_path);
+                dbg!(&child_dir);
+                self.add_dir(dir, &dir_path, &child_dir).await?;
+            }
+            Ok(())
+        })
     }
 
     async fn upload_blob(&mut self, encoded: &[u8]) -> Result<Digest, Error> {
@@ -198,6 +240,14 @@ impl Gemsbok {
         let encoded = P::encode_to_vec(&message);
         self.upload_blob(&encoded).await
     }
+
+    async fn download_proto<P: prost::Message + std::default::Default>(
+        &mut self,
+        digest: Digest,
+    ) -> Result<P, Error> {
+        let blob = self.get_blob(digest).await?;
+        Ok(Message::decode(&mut std::io::Cursor::new(blob))?)
+    }
 }
 
 #[derive(Debug)]
@@ -214,7 +264,7 @@ pub struct File {
     contents: Vec<u8>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Directory {
     files: Vec<File>,
     dirs: HashMap<String, Directory>,
@@ -228,25 +278,30 @@ impl Directory {
         }
     }
 
-    pub fn add_file(&mut self, path: &Path, contents: &[u8]) {
+    pub fn add_path(&mut self, path: &Path, contents: Option<&[u8]>) {
         assert!(path.is_relative());
-        let components = path.components().collect::<Vec<_>>();
-        if components.len() == 1 {
-            self.files.push(File {
+        let mut components = path.components().collect::<VecDeque<_>>();
+
+        let mut dirs = &mut self.dirs;
+        let mut files = &mut self.files;
+        while components.len() > 1 {
+            let segment = components
+                .pop_front()
+                .unwrap()
+                .as_os_str()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let dir = dirs.entry(segment.clone()).or_default();
+            dirs = &mut dir.dirs;
+            files = &mut dir.files;
+        }
+
+        if let Some(contents) = contents {
+            files.push(File {
                 name: path.file_name().unwrap().to_str().unwrap().to_string(),
                 contents: contents.to_vec(),
             });
         }
-
-        // TODO finish
-        assert_eq!(components.len(), 1);
-    }
-
-    pub fn file(mut self, name: &str, contents: &[u8]) -> Self {
-        self.files.push(File {
-            name: name.to_owned(),
-            contents: contents.to_owned(),
-        });
-        self
     }
 }
