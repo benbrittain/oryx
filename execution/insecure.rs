@@ -133,6 +133,12 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
                         std::fs::create_dir_all(prefix)?;
                     }
                     let mut file = File::create(&path).await?;
+                    if executable {
+                        let metadata = file.metadata().await?;
+                        let mut permissions = metadata.permissions();
+                        permissions.set_mode(0o777);
+                        tokio::fs::set_permissions(&path, permissions).await?;
+                    }
                     eprintln!("entry: {path:#?}");
                     log::info!("digest: {}", digest);
                     let data = self.cas.read_blob(digest).await?;
@@ -153,6 +159,7 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
             .envs(command.env_vars)
             .output()
             .await?;
+        log::info!("{:?}", &output);
 
         // Verify outputs were created and get their hash
         let mut entries = vec![];

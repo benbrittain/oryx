@@ -123,7 +123,7 @@ impl<B: ExecutionBackend, C: ContentAddressableStorage> ExecutionEngine<B, C> {
                     .await?;
 
                     // Run the actual command using the backend.
-                    let mut resp = dbg!(backend.run_command(cmd, layout).await?);
+                    let mut resp = backend.run_command(cmd, layout).await?;
 
                     log::info!("================= {uuid} | Done =================");
                     tx.send(ExecuteStatus {

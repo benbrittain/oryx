@@ -39,14 +39,14 @@ impl crate::ContentAddressableStorage for InMemory {
     async fn read_blob(&self, digest: Digest) -> Result<Vec<u8>, CasError> {
         let cas = self.cas.lock().await;
         let data = cas.get(&digest).ok_or_else(|| CasError::BlobNotFound(digest.clone()))?;
-        log::info!("read: {}: {:?}", digest, data);
+        log::info!("read blob: {}", digest);
         Ok(data.to_vec())
     }
 
     async fn has_blob(&self, digest: &Digest) -> Result<bool, CasError> {
         let cas = self.cas.lock().await;
         let r = cas.contains_key(digest);
-        log::info!("check: {} / {}", digest, r);
+        log::info!("check blob: {} = {}", digest, r);
         Ok(r)
     }
 }

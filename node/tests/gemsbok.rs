@@ -53,6 +53,7 @@ impl Gemsbok {
             let file_digest = self.upload_blob(&file.contents).await?;
             let node = protos::re::FileNode {
                 name: file.name,
+                is_executable: file.executable,
                 digest: Some(file_digest.into()),
                 ..Default::default()
             };
@@ -286,6 +287,7 @@ pub struct ActionResult {
 pub struct File {
     name: String,
     contents: Vec<u8>,
+    executable: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -317,7 +319,7 @@ impl Directory {
         });
     }
 
-    pub fn add_path(&mut self, path: &Path, contents: Option<&[u8]>) {
+    pub fn add_entry(&mut self, path: &Path, contents: Option<&[u8]>, executable: bool) {
         assert!(path.is_relative());
         let mut components = path.components().collect::<VecDeque<_>>();
 
@@ -340,7 +342,16 @@ impl Directory {
             files.push(File {
                 name: path.file_name().unwrap().to_str().unwrap().to_string(),
                 contents: contents.to_vec(),
+                executable,
             });
         }
+    }
+
+    pub fn add_exec(&mut self, path: &Path, contents: Option<&[u8]>) {
+        self.add_entry(path, contents, true)
+    }
+
+    pub fn add_path(&mut self, path: &Path, contents: Option<&[u8]>) {
+        self.add_entry(path, contents, false)
     }
 }

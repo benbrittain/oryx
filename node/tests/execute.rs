@@ -228,3 +228,29 @@ async fn basic_req_with_symlink_output() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn basic_req_with_executable_input() {
+    oryx_test(|channel| async move {
+        let mut client = Gemsbok::new(channel);
+        let command_digest = client
+            .add_command(&["/bin/sh", "-c", "./script.sh > out.txt"], &["out.txt"])
+            .await
+            .unwrap();
+        let mut input_directory = Directory::root();
+        input_directory.add_exec(&PathBuf::from("script.sh"), Some(b"#!/bin/sh\necho '42'\n"));
+        let root_dir_digest = client.add_directory(input_directory).await.unwrap();
+        let action_digest = client
+            .add_action(command_digest, root_dir_digest)
+            .await
+            .unwrap();
+        let result = client.execute(action_digest).await.unwrap();
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("out.txt"), Some(b"42\n"));
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.directory, expected_directory);
+    })
+    .await;
+}
+
