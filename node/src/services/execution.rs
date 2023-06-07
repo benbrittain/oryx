@@ -270,6 +270,16 @@ fn convert_to_op(
                         }],
                     }
                 }
+                ExecuteError::IoError(info) => protos::rpc::Status {
+                    code: protos::rpc::Code::Internal.into(),
+                    message: format!("Internal Failure: {info}."),
+                    ..Default::default()
+                },
+                ExecuteError::CasError(info) => protos::rpc::Status {
+                    code: protos::rpc::Code::Internal.into(),
+                    message: format!("Internal Failure: {info}."),
+                    ..Default::default()
+                },
                 ExecuteError::Internal(info) => protos::rpc::Status {
                     code: protos::rpc::Code::Internal.into(),
                     message: format!("Internal Failure: {info}."),

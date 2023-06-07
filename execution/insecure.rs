@@ -1,5 +1,4 @@
 use crate::*;
-use anyhow::{anyhow, Error};
 use cas::ContentAddressableStorage;
 use futures::future::{BoxFuture, FutureExt};
 use openat2::*;
@@ -18,7 +17,7 @@ pub struct Insecure<C> {
 }
 
 impl<C: ContentAddressableStorage> Insecure<C> {
-    pub fn new(cas: C) -> Result<Self, Error> {
+    pub fn new(cas: C) -> Result<Self, ExecuteError> {
         Ok(Insecure { cas })
     }
 
@@ -27,14 +26,14 @@ impl<C: ContentAddressableStorage> Insecure<C> {
         root_path: &Path,
         path: &Path,
         target: &Path,
-    ) -> Result<Entry, Error> {
+    ) -> Result<Entry, ExecuteError> {
         Ok(Entry::Symlink {
             path: path.strip_prefix(&root_path).unwrap().to_path_buf(),
             target: target.strip_prefix(&root_path).unwrap().to_path_buf(),
         })
     }
 
-    async fn add_file(&self, root_path: &Path, path: &Path) -> Result<Entry, Error> {
+    async fn add_file(&self, root_path: &Path, path: &Path) -> Result<Entry, ExecuteError> {
         let mut file = tokio::fs::File::open(&path).await?;
         let mut buf = vec![];
         file.read_to_end(&mut buf).await?;
@@ -51,7 +50,7 @@ impl<C: ContentAddressableStorage> Insecure<C> {
         root_path: &'a Path,
         path: &'a Path,
         children: &'a mut Vec<protos::re::Directory>,
-    ) -> BoxFuture<'a, Result<protos::re::Directory, Error>> {
+    ) -> BoxFuture<'a, Result<protos::re::Directory, ExecuteError>> {
         Box::pin(async move {
             let mut files = vec![];
             let mut directories = vec![];
@@ -105,12 +104,16 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         &self,
         command: Command,
         dir: DirectoryLayout,
-    ) -> Result<ExecuteResponse, Error> {
+    ) -> Result<ExecuteResponse, ExecuteError> {
         log::info!("{command:#?}");
 
         // Create a temporary directory and write all files from the cas there
         let tmp_dir = TempDir::new("oryx-insecure")?;
         let root_path = tmp_dir.path().to_path_buf();
+        // TODO Remove this!
+        // Only here so I can look in the insecure folders in /tmp during testing.
+        std::mem::forget(tmp_dir);
+
         log::info!("Insecure directory: {root_path:#?}");
         for entry in dir.entries {
             match entry {
@@ -128,7 +131,7 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
                     executable,
                     path,
                 } => {
-                    let path = get_root_relative(&root_path, &path);
+                    let path = dbg!(get_root_relative(&root_path, &path));
                     if let Some(prefix) = path.parent() {
                         std::fs::create_dir_all(prefix)?;
                     }
@@ -140,9 +143,9 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
                         tokio::fs::set_permissions(&path, permissions).await?;
                     }
                     eprintln!("entry: {path:#?}");
-                    log::info!("digest: {}", digest);
+                    log::info!("digest: {:?}", digest);
                     let data = self.cas.read_blob(digest).await?;
-                    eprintln!("data length: {}", data.len());
+                    eprintln!("data length: {:?}", data.len());
                     eprintln!("file: {file:?}");
                     file.write_all(&data).await?;
                     file.flush().await?;
@@ -191,9 +194,6 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
             }
         }
 
-        // TODO Remove this!
-        // Only here so I can look in the insecure folders in /tmp during testing.
-        std::mem::forget(tmp_dir);
 
         log::info!("Command Output: {output:?}");
         Ok(ExecuteResponse {

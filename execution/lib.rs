@@ -1,4 +1,3 @@
-use anyhow::Error;
 use async_trait::async_trait;
 use cas::ContentAddressableStorage;
 use common::Digest;
@@ -6,6 +5,7 @@ use std::future::Future;
 use std::path::Path;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
+use thiserror::Error;
 use uuid::Uuid;
 
 pub mod insecure;
@@ -58,13 +58,17 @@ pub enum ExecuteStage {
     Error(ExecuteError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ExecuteError {
-    /// One or more arguments are invalid.
+    #[error("One or more arguments are invalid: {0}")]
     InvalidArgument(String),
-    /// A Blob was not found when setting up the action was requested. The client may be able to fix the errors and retry.
+    #[error("A Blob was not found when setting up the action was requested. The client may be able to fix the errors and retry. {0}")]
     BlobNotFound(Digest),
-    /// An internal error occurred in the execution engine or the worker.
+    #[error("An internal I/O error occured. {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("An internal error occurred in the content store: {0}")]
+    CasError(#[from] cas::CasError),
+    #[error("An internal error occurred in the execution engine or the worker: {0}")]
     Internal(String),
 }
 
@@ -89,7 +93,7 @@ impl<B: ExecutionBackend, C: ContentAddressableStorage> ExecutionEngine<B, C> {
     pub fn execute<Exec>(
         &self,
         setup_func: impl Fn() -> Exec + Send + Sync + 'static,
-    ) -> Result<mpsc::Receiver<ExecuteStatus>, Error>
+    ) -> Result<mpsc::Receiver<ExecuteStatus>, ExecuteError>
     where
         Exec: Future<Output = Result<(Digest, Command, DirectoryLayout), ExecuteError>> + Send,
     {
@@ -123,20 +127,30 @@ impl<B: ExecutionBackend, C: ContentAddressableStorage> ExecutionEngine<B, C> {
                     .await?;
 
                     // Run the actual command using the backend.
-                    let mut resp = backend.run_command(cmd, layout).await?;
-
-                    log::info!("================= {uuid} | Done =================");
-                    tx.send(ExecuteStatus {
-                        uuid: uuid,
-                        action_digest: Some(action_digest.clone()),
-                        stage: ExecuteStage::Done(ExecuteResponse {
-                            exit_status: resp.exit_status,
-                            output_paths: resp.output_paths,
-                            stderr: resp.stderr,
-                            stdout: resp.stdout,
-                        }),
-                    })
-                    .await?;
+                    match backend.run_command(cmd, layout).await {
+                        Ok(resp) => {
+                            log::info!("================= {uuid} | Done =================");
+                            tx.send(ExecuteStatus {
+                                uuid: uuid,
+                                action_digest: Some(action_digest.clone()),
+                                stage: ExecuteStage::Done(ExecuteResponse {
+                                    exit_status: resp.exit_status,
+                                    output_paths: resp.output_paths,
+                                    stderr: resp.stderr,
+                                    stdout: resp.stdout,
+                                }),
+                            })
+                            .await?;
+                        },
+                        Err(err) => {
+                            tx.send(ExecuteStatus {
+                                uuid: uuid,
+                                action_digest: None,
+                                stage: ExecuteStage::Error(err),
+                            })
+                            .await?;
+                        }
+                    }
                 }
                 Err(err) => {
                     tx.send(ExecuteStatus {
@@ -167,5 +181,5 @@ pub trait ExecutionBackend: Send + Sync + 'static + Clone {
         &self,
         command: Command,
         dir: DirectoryLayout,
-    ) -> Result<ExecuteResponse, Error>;
+    ) -> Result<ExecuteResponse, ExecuteError>;
 }
