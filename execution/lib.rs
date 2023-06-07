@@ -28,15 +28,10 @@ pub enum Entry {
         path: PathBuf,
         digest: Digest,
     },
-}
-
-impl Entry {
-    pub fn get_path(&self) -> &Path {
-        match self {
-            Entry::File { path, .. } => path,
-            Entry::Directory { path, .. } => path,
-        }
-    }
+    Symlink {
+        path: PathBuf,
+        target: PathBuf,
+    },
 }
 
 /// Description of how to layout execution directory structure

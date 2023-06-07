@@ -165,7 +165,66 @@ async fn basic_req_with_dir_output() {
         expected_directory.add_path(&PathBuf::from("a/b/dir/foo/baz"), Some(b"baz baz baz\n"));
 
         assert_eq!(result.exit_code, 0);
-        assert_eq!(result.directory, expected_directory,);
+        assert_eq!(result.directory, expected_directory);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn basic_req_with_symlink_input() {
+    oryx_test(|channel| async move {
+        let mut client = Gemsbok::new(channel);
+        let command_digest = client
+            .add_command(&["/bin/sh", "-c", "cat b.txt > out.txt"], &["out.txt"])
+            .await
+            .unwrap();
+        let mut input_directory = Directory::root();
+        input_directory.add_path(&PathBuf::from("a.txt"), Some(b"kalahari\n"));
+        input_directory.add_symlink(&PathBuf::from("b.txt"), &PathBuf::from("a.txt"));
+        let root_dir_digest = client.add_directory(input_directory).await.unwrap();
+        let action_digest = client
+            .add_action(command_digest, root_dir_digest)
+            .await
+            .unwrap();
+        let result = client.execute(action_digest).await.unwrap();
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("out.txt"), Some(b"kalahari\n"));
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.directory, expected_directory);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn basic_req_with_symlink_output() {
+    oryx_test(|channel| async move {
+        let mut client = Gemsbok::new(channel);
+        let command_digest = client
+            .add_command(
+                &[
+                    "/bin/sh",
+                    "-c",
+                    "echo 'ooga' > a.txt; \
+                    ln -s a.txt b.txt;",
+                ],
+                &["a.txt", "b.txt"],
+            )
+            .await
+            .unwrap();
+        let root_dir_digest = client.add_directory(Directory::root()).await.unwrap();
+        let action_digest = client
+            .add_action(command_digest, root_dir_digest)
+            .await
+            .unwrap();
+        let result = client.execute(action_digest).await.unwrap();
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("a.txt"), Some(b"ooga\n"));
+        // b targets a
+        expected_directory.add_symlink(&PathBuf::from("b.txt"), &PathBuf::from("a.txt"));
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.directory, expected_directory);
     })
     .await;
 }

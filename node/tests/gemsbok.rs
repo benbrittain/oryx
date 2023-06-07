@@ -42,6 +42,13 @@ impl Gemsbok {
     /// Create a Directory message and upload to CAS returning the digest.
     pub async fn add_directory(&mut self, root: Directory) -> Result<DirectoryDigest, Error> {
         let mut files = vec![];
+        let mut symlinks = vec![];
+        let mut directories = vec![];
+
+        for dir in root.dirs {
+            todo!();
+        }
+
         for file in root.files {
             let file_digest = self.upload_blob(&file.contents).await?;
             let node = protos::re::FileNode {
@@ -52,9 +59,20 @@ impl Gemsbok {
             files.push(node);
         }
 
+        for symlink in root.symlinks {
+            let node = protos::re::SymlinkNode {
+                name: symlink.path.as_os_str().to_str().unwrap().to_string(),
+                target: symlink.target.as_os_str().to_str().unwrap().to_string(),
+                ..Default::default()
+            };
+            symlinks.push(node);
+        }
+
         let root = protos::re::Directory {
             files,
-            ..Default::default()
+            directories,
+            symlinks,
+            node_properties: None,
         };
         Ok(DirectoryDigest(self.upload_proto(root).await?))
     }
@@ -114,7 +132,7 @@ impl Gemsbok {
             let Response(result) = op.result.unwrap() else { todo!() };
             let resp: protos::re::ExecuteResponse =
                 Message::decode(result.value.as_slice()).unwrap();
-            let status = dbg!(resp.status.unwrap());
+            let status = resp.status.unwrap();
 
             // Should succeed
             assert_eq!(status.code, protos::rpc::Code::Ok.into());
@@ -128,10 +146,16 @@ impl Gemsbok {
             let stdout = std::str::from_utf8(&resp.stdout_raw)?;
 
             let mut directory = Directory::root();
-            for file in dbg!(resp.output_files) {
+            for file in resp.output_files {
                 let path = PathBuf::from(file.path);
                 let contents = self.get_blob(file.digest.unwrap().into()).await?;
                 directory.add_path(&path, Some(&contents));
+            }
+
+            for symlink in resp.output_symlinks {
+                let path = PathBuf::from(symlink.path);
+                let target = PathBuf::from(symlink.target);
+                directory.add_symlink(&path, &target);
             }
 
             for dir in resp.output_directories {
@@ -163,13 +187,15 @@ impl Gemsbok {
     ) -> BoxFuture<'a, Result<(), Error>> {
         Box::pin(async move {
             for file_node in &sub_dir.files {
-                dbg!(&file_node);
                 let mut file_path = path.to_path_buf();
                 file_path.push(&file_node.name);
-                dbg!(&file_path);
                 let digest = file_node.digest.clone().unwrap();
                 let contents = self.get_blob(digest.into()).await?;
                 dir.add_path(&file_path, Some(&contents));
+            }
+
+            for symlink in &sub_dir.symlinks {
+                todo!();
             }
 
             for dir_node in &sub_dir.directories {
@@ -178,8 +204,6 @@ impl Gemsbok {
 
                 let mut dir_path = path.to_path_buf();
                 dir_path.push(&dir_node.name);
-                dbg!(&dir_path);
-                dbg!(&child_dir);
                 self.add_dir(dir, &dir_path, &child_dir).await?;
             }
             Ok(())
@@ -264,9 +288,16 @@ pub struct File {
     contents: Vec<u8>,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct Symlink {
+    path: PathBuf,
+    target: PathBuf,
+}
+
 #[derive(Debug, PartialEq, Default)]
 pub struct Directory {
     files: Vec<File>,
+    symlinks: Vec<Symlink>,
     dirs: HashMap<String, Directory>,
 }
 
@@ -274,8 +305,16 @@ impl Directory {
     pub fn root() -> Self {
         Directory {
             files: vec![],
+            symlinks: vec![],
             dirs: HashMap::new(),
         }
+    }
+
+    pub fn add_symlink(&mut self, path: &Path, target: &Path) {
+        self.symlinks.push(Symlink {
+            path: path.to_path_buf(),
+            target: target.to_path_buf(),
+        });
     }
 
     pub fn add_path(&mut self, path: &Path, contents: Option<&[u8]>) {

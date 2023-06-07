@@ -57,7 +57,13 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
     root: PathBuf,
 ) -> BoxFuture<'a, Result<(), ExecuteError>> {
     Box::pin(async move {
-        assert_eq!(dir.symlinks.len(), 0);
+        for symlink in dir.symlinks {
+            mapping.entries.push(execution_engine::Entry::Symlink {
+                path: symlink.name.into(),
+                target: symlink.target.into(),
+            });
+        }
+
         for file in dir.files {
             let mut path = root.clone();
             path.push(&file.name);
@@ -150,6 +156,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             .map(|ev| (ev.name.clone(), ev.value.clone()))
                             .collect(),
                     };
+                    eprintln!("{:#?}", root_directory);
 
                     // Collect the filesystem information for the execution engine
                     let mut dir_layout = execution_engine::DirectoryLayout::default();
@@ -165,7 +172,6 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             "Failed to execute mapping collection: {e:?}"
                         ))
                     })?;
-                    dbg!(&dir_layout);
 
                     if !command.output_directories.is_empty() || !command.output_files.is_empty() {
                         return Err(ExecuteError::InvalidArgument(format!(
@@ -297,8 +303,16 @@ fn convert_to_op(
             // Collect outputs from the finished execution
             let mut output_files = vec![];
             let mut output_directories = vec![];
+            let mut output_symlinks = vec![];
             for entry in resp.output_paths {
                 match entry {
+                    Entry::Symlink { path, target } => {
+                        output_symlinks.push(protos::re::OutputSymlink {
+                            path: path.display().to_string(),
+                            target: target.display().to_string(),
+                            node_properties: None,
+                        });
+                    }
                     Entry::File {
                         path,
                         digest,
@@ -334,7 +348,7 @@ fn convert_to_op(
                 result: Some(protos::re::ActionResult {
                     output_files,
                     output_file_symlinks: vec![],
-                    output_symlinks: vec![],
+                    output_symlinks,
                     output_directories,
                     output_directory_symlinks: vec![],
                     exit_code: resp.exit_status,

@@ -22,6 +22,18 @@ impl<C: ContentAddressableStorage> Insecure<C> {
         Ok(Insecure { cas })
     }
 
+    async fn add_symlink(
+        &self,
+        root_path: &Path,
+        path: &Path,
+        target: &Path,
+    ) -> Result<Entry, Error> {
+        Ok(Entry::Symlink {
+            path: path.strip_prefix(&root_path).unwrap().to_path_buf(),
+            target: target.strip_prefix(&root_path).unwrap().to_path_buf(),
+        })
+    }
+
     async fn add_file(&self, root_path: &Path, path: &Path) -> Result<Entry, Error> {
         let mut file = tokio::fs::File::open(&path).await?;
         let mut buf = vec![];
@@ -46,8 +58,9 @@ impl<C: ContentAddressableStorage> Insecure<C> {
 
             for entry in std::fs::read_dir(path)? {
                 let entry = entry?;
-                dbg!(&entry.path());
-                if entry.path().is_file() {
+                if entry.path().is_symlink() {
+                    todo!();
+                } else if entry.path().is_file() {
                     let Entry::File{path, digest, executable} = self.add_file(root_path, &entry.path()).await? else { unreachable!() };
                     files.push(protos::re::FileNode {
                         name: entry.file_name().to_str().unwrap().to_string(),
@@ -69,12 +82,12 @@ impl<C: ContentAddressableStorage> Insecure<C> {
                 }
             }
 
-            Ok(dbg!(protos::re::Directory {
+            Ok(protos::re::Directory {
                 files,
                 directories,
                 symlinks: vec![],
                 node_properties: None,
-            }))
+            })
         })
     }
 }
@@ -100,14 +113,22 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         let root_path = tmp_dir.path().to_path_buf();
         log::info!("Insecure directory: {root_path:#?}");
         for entry in dir.entries {
-            let path = get_root_relative(&root_path, &entry.get_path());
             match entry {
-                Entry::Directory { .. } => {
+                Entry::Symlink { path, target } => {
+                    let path = get_root_relative(&root_path, &path);
+                    let target = get_root_relative(&root_path, &target);
+                    std::os::unix::fs::symlink(path, target)?;
+                }
+                Entry::Directory { path, .. } => {
+                    let path = get_root_relative(&root_path, &path);
                     std::fs::create_dir_all(path)?;
                 }
                 Entry::File {
-                    digest, executable, ..
+                    digest,
+                    executable,
+                    path,
                 } => {
+                    let path = get_root_relative(&root_path, &path);
                     if let Some(prefix) = path.parent() {
                         std::fs::create_dir_all(prefix)?;
                     }
@@ -138,7 +159,14 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         for path in dir.output_paths {
             let global_path = get_root_relative(&root_path, &path);
             let mut children = vec![];
-            if global_path.is_dir() {
+            if global_path.is_symlink() {
+                let symlink_path = global_path.read_link().expect("read_link call failed");
+                let symlink_path = get_root_relative(&root_path, &symlink_path);
+                entries.push(
+                    self.add_symlink(&root_path, &global_path, &symlink_path)
+                        .await?,
+                );
+            } else if global_path.is_dir() {
                 let root = self
                     .add_dir(&root_path, &global_path, &mut children)
                     .await?;
