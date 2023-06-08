@@ -157,6 +157,15 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
             }
         }
 
+        // Directories leading up to the output paths are created by the worker prior
+        // to execution, even if they are not explicitly part of the input root.
+        for path in &dir.output_paths {
+            let global_path = get_root_relative(&root_path, &path);
+            if let Some(prefix) = global_path.parent() {
+                std::fs::create_dir_all(prefix)?;
+            }
+        }
+
         let binary = &command.arguments[0];
         let args = &command.arguments[1..];
         let output = process::Command::new(binary)

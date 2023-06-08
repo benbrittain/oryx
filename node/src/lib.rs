@@ -47,7 +47,7 @@ pub async fn start_oryx(
     let server = Server::builder()
         .trace_fn(|event| tracing::info_span!("gRPC Request", api = event.uri().path()))
         .add_service(ActionCacheServer::new(ActionCacheService::default()))
-        .add_service(ByteStreamServer::new(BytestreamService::new()))
+        .add_service(ByteStreamServer::new(BytestreamService::new(cas.clone())))
         .add_service(CapabilitiesServer::new(CapabilitiesService::default()))
         .add_service(ContentAddressableStorageServer::new(
             ContentStorageService::new(cas.clone()),
