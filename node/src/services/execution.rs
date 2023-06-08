@@ -58,9 +58,17 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
 ) -> BoxFuture<'a, Result<(), ExecuteError>> {
     Box::pin(async move {
         for symlink in dir.symlinks {
+            info!("{:?}", symlink);
+
+            let mut link_path = root.clone();
+            link_path.push(&symlink.name);
+
+            let mut original_path = root.clone();
+            original_path.push(&symlink.target);
+
             mapping.entries.push(execution_engine::Entry::Symlink {
-                path: symlink.name.into(),
-                target: symlink.target.into(),
+                original: original_path.into(),
+                link: link_path.into(),
             });
         }
 
@@ -172,6 +180,9 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             "Failed to execute mapping collection: {e:?}"
                         ))
                     })?;
+                    trace!("{dir_layout:#?}");
+
+                    assert!(command.working_directory.is_empty());
 
                     if !command.output_directories.is_empty() || !command.output_files.is_empty() {
                         return Err(ExecuteError::InvalidArgument(format!(
@@ -316,10 +327,10 @@ fn convert_to_op(
             let mut output_symlinks = vec![];
             for entry in resp.output_paths {
                 match entry {
-                    Entry::Symlink { path, target } => {
+                    Entry::Symlink { original, link } => {
                         output_symlinks.push(protos::re::OutputSymlink {
-                            path: path.display().to_string(),
-                            target: target.display().to_string(),
+                            path: original.display().to_string(),
+                            target: link.display().to_string(),
                             node_properties: None,
                         });
                     }
@@ -351,6 +362,13 @@ fn convert_to_op(
                     }
                 }
             }
+
+            // The files, directories and symlinks in the directory must each be sorted
+            // in lexicographical order by path. The path strings must be sorted by code
+            // point, equivalently, by UTF-8 bytes.
+            output_files.sort_by(|a, b| b.path.cmp(&a.path));
+            output_directories.sort_by(|a, b| b.path.cmp(&a.path));
+            output_symlinks.sort_by(|a, b| b.path.cmp(&a.path));
 
             info!("output: {:#?}", output_files);
 

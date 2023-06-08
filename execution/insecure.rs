@@ -24,17 +24,17 @@ impl<C: ContentAddressableStorage> Insecure<C> {
     async fn add_symlink(
         &self,
         root_path: &Path,
-        path: &Path,
-        target: &Path,
+        original: &Path,
+        link: &Path,
     ) -> Result<Entry, ExecuteError> {
         Ok(Entry::Symlink {
-            path: path.strip_prefix(&root_path).unwrap().to_path_buf(),
-            target: target.strip_prefix(&root_path).unwrap().to_path_buf(),
+            original: original.strip_prefix(&root_path).unwrap().to_path_buf(),
+            link: link.strip_prefix(&root_path).unwrap().to_path_buf(),
         })
     }
 
     async fn add_file(&self, root_path: &Path, path: &Path) -> Result<Entry, ExecuteError> {
-        let mut file = tokio::fs::File::open(&path).await?;
+        let mut file = tokio::fs::File::open(dbg!(&path)).await?;
         let mut buf = vec![];
         file.read_to_end(&mut buf).await?;
         let digest = self.cas.write_blob(&buf, None).await?;
@@ -99,13 +99,14 @@ fn get_root_relative(root_path: &Path, path: &Path) -> PathBuf {
 
 #[async_trait]
 impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
-    #[instrument(skip(self))]
+    #[instrument(skip_all)]
     async fn run_command(
         &self,
         command: Command,
         dir: DirectoryLayout,
     ) -> Result<ExecuteResponse, ExecuteError> {
         log::info!("{command:#?}");
+        log::info!("{dir:#?}");
 
         // Create a temporary directory and write all files from the cas there
         let tmp_dir = TempDir::new("oryx-insecure")?;
@@ -117,10 +118,14 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         log::info!("Insecure directory: {root_path:#?}");
         for entry in dir.entries {
             match entry {
-                Entry::Symlink { path, target } => {
-                    let path = get_root_relative(&root_path, &path);
-                    let target = get_root_relative(&root_path, &target);
-                    std::os::unix::fs::symlink(path, target)?;
+                Entry::Symlink { original, link } => {
+                    let original = get_root_relative(&root_path, &original);
+                    if let Some(prefix) = original.parent() {
+                        std::fs::create_dir_all(prefix)?;
+                    }
+                    let link = get_root_relative(&root_path, &link);
+                    log::info!("symlink: {original:?} -> {link:?}");
+                    std::os::unix::fs::symlink(original, link)?;
                 }
                 Entry::Directory { path, .. } => {
                     let path = get_root_relative(&root_path, &path);
@@ -132,23 +137,22 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
                     path,
                 } => {
                     let path = dbg!(get_root_relative(&root_path, &path));
+                    log::info!("entry: {path:#?}");
+                    log::info!("digest: {:?}", digest);
                     if let Some(prefix) = path.parent() {
                         std::fs::create_dir_all(prefix)?;
                     }
                     let mut file = File::create(&path).await?;
+                    let data = self.cas.read_blob(digest).await?;
+                    file.write_all(&data).await?;
+                    file.flush().await?;
                     if executable {
                         let metadata = file.metadata().await?;
                         let mut permissions = metadata.permissions();
                         permissions.set_mode(0o777);
                         tokio::fs::set_permissions(&path, permissions).await?;
+                        log::info!("made executable.");
                     }
-                    eprintln!("entry: {path:#?}");
-                    log::info!("digest: {:?}", digest);
-                    let data = self.cas.read_blob(digest).await?;
-                    eprintln!("data length: {:?}", data.len());
-                    eprintln!("file: {file:?}");
-                    file.write_all(&data).await?;
-                    file.flush().await?;
                 }
             }
         }
@@ -158,7 +162,6 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         let output = process::Command::new(binary)
             .current_dir(root_path.clone())
             .args(args)
-            .env_clear()
             .envs(command.env_vars)
             .output()
             .await?;
@@ -193,7 +196,6 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
                 panic!("path of unknown type");
             }
         }
-
 
         log::info!("Command Output: {output:?}");
         Ok(ExecuteResponse {

@@ -1,5 +1,5 @@
-use thiserror::Error;
 use common::Digest;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CasError {

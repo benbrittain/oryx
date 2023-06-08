@@ -4,8 +4,8 @@ use common::Digest;
 use std::future::Future;
 use std::path::Path;
 use std::path::PathBuf;
-use tokio::sync::mpsc;
 use thiserror::Error;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub mod insecure;
@@ -29,8 +29,8 @@ pub enum Entry {
         digest: Digest,
     },
     Symlink {
-        path: PathBuf,
-        target: PathBuf,
+        original: PathBuf,
+        link: PathBuf,
     },
 }
 
@@ -141,7 +141,7 @@ impl<B: ExecutionBackend, C: ContentAddressableStorage> ExecutionEngine<B, C> {
                                 }),
                             })
                             .await?;
-                        },
+                        }
                         Err(err) => {
                             tx.send(ExecuteStatus {
                                 uuid: uuid,

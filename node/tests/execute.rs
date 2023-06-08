@@ -205,10 +205,11 @@ async fn basic_req_with_symlink_output() {
                 &[
                     "/bin/sh",
                     "-c",
-                    "echo 'ooga' > a.txt; \
-                    ln -s a.txt b.txt;",
+                    "echo 'windhoek' > target.txt; \
+                    mkdir -p a/b/c;
+                    ln -s target.txt a/b/c/source.txt;",
                 ],
-                &["a.txt", "b.txt"],
+                &["target.txt", "a/b/c/source.txt"],
             )
             .await
             .unwrap();
@@ -220,9 +221,50 @@ async fn basic_req_with_symlink_output() {
         let result = client.execute(action_digest).await.unwrap();
 
         let mut expected_directory = Directory::root();
-        expected_directory.add_path(&PathBuf::from("a.txt"), Some(b"ooga\n"));
+        expected_directory.add_path(&PathBuf::from("target.txt"), Some(b"windhoek\n"));
         // b targets a
-        expected_directory.add_symlink(&PathBuf::from("b.txt"), &PathBuf::from("a.txt"));
+        expected_directory.add_symlink(
+            &PathBuf::from("a/b/c/source.txt"),
+            &PathBuf::from("target.txt"),
+        );
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.directory, expected_directory);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn basic_req_with_relative_symlink_output() {
+    oryx_test(|channel| async move {
+        let mut client = Gemsbok::new(channel);
+        let command_digest = client
+            .add_command(
+                &[
+                    "/bin/sh",
+                    "-c",
+                    "echo 'windhoek' > target.txt; \
+                    mkdir -p a/b/c;
+                    cd a/b;
+                    ln -s ../../target.txt c/source.txt;",
+                ],
+                &["target.txt", "a/b/c/source.txt"],
+            )
+            .await
+            .unwrap();
+        let root_dir_digest = client.add_directory(Directory::root()).await.unwrap();
+        let action_digest = client
+            .add_action(command_digest, root_dir_digest)
+            .await
+            .unwrap();
+        let result = client.execute(action_digest).await.unwrap();
+
+        let mut expected_directory = Directory::root();
+        expected_directory.add_path(&PathBuf::from("target.txt"), Some(b"windhoek\n"));
+        // b targets a
+        expected_directory.add_symlink(
+            &PathBuf::from("a/b/c/source.txt"),
+            &PathBuf::from("../../target.txt"),
+        );
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.directory, expected_directory);
     })
@@ -253,4 +295,3 @@ async fn basic_req_with_executable_input() {
     })
     .await;
 }
-
