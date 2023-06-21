@@ -19,6 +19,7 @@ rust_library(
         "//third-party/rust:uuid",
         "//third-party/rust:futures",
         "//third-party/rust:thiserror",
+        "//third-party/rust:fuser",
 
         # I don't like having this dependency here. Only use OutputDirectory
         # from this. It's needed because the CAS stores it's Directory info
