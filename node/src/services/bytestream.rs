@@ -1,11 +1,11 @@
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::StreamExt;
 use cas::ContentAddressableStorage;
+use common::Digest;
 use std::str::FromStr;
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
 use tonic::{Request, Response, Status};
-use tracing::{info, error, instrument};
-use common::Digest;
+use tracing::{error, info, instrument};
 
 #[derive(Debug)]
 pub struct BytestreamService<T> {
@@ -14,9 +14,7 @@ pub struct BytestreamService<T> {
 
 impl<T> BytestreamService<T> {
     pub fn new(cas: T) -> Self {
-        BytestreamService {
-            cas,
-        }
+        BytestreamService { cas }
     }
 }
 
@@ -34,9 +32,8 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
         // TODO support other offsets
         assert_eq!(request.read_offset, 0);
 
-        let digest = Digest::from_blob_str(&request.resource_name).map_err(|e| {
-            tonic::Status::invalid_argument(format!("Invalid digest: {e:?}"))
-        })?;
+        let digest = Digest::from_blob_str(&request.resource_name)
+            .map_err(|e| tonic::Status::invalid_argument(format!("Invalid digest: {e:?}")))?;
 
         let (tx, rx) = mpsc::channel(32);
         let cas = self.cas.clone();
@@ -51,7 +48,7 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
                             data: chunk.to_vec(),
                         }));
                     }
-                },
+                }
                 Err(_) => {
                     tx.send(Err(tonic::Status::not_found(format!("Blob not found"))));
                 }
@@ -73,8 +70,7 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
         while let Some(req) = stream.next().await {
             let req = req?;
             if digest.is_none() {
-                digest = Some(Digest::from_blob_str(&req.resource_name)
-                    .map_err(|e| {
+                digest = Some(Digest::from_blob_str(&req.resource_name).map_err(|e| {
                     tonic::Status::invalid_argument(format!("Invalid digest: {e:?}"))
                 })?);
             }
@@ -83,9 +79,10 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
 
             if req.finish_write {
                 assert!(digest.is_some());
-                self.cas.write_blob(&blob, digest).await.map_err(|e| {
-                    tonic::Status::internal(format!("Invalid blob write: {e:?}"))
-                })?;
+                self.cas
+                    .write_blob(&blob, digest)
+                    .await
+                    .map_err(|e| tonic::Status::internal(format!("Invalid blob write: {e:?}")))?;
                 return Ok(Response::new(protos::bytestream::WriteResponse {
                     committed_size: blob.len() as i64,
                 }));
@@ -99,6 +96,8 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
         &self,
         _request: Request<protos::bytestream::QueryWriteStatusRequest>,
     ) -> Result<Response<protos::bytestream::QueryWriteStatusResponse>, Status> {
-        Err(tonic::Status::unknown(format!("Not Supported at this time.")))
+        Err(tonic::Status::unknown(format!(
+            "Not Supported at this time."
+        )))
     }
 }
