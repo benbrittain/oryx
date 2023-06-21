@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub mod insecure;
+pub mod hermetic;
 
 #[derive(Default, Debug)]
 pub struct Command {
