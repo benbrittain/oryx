@@ -24,11 +24,11 @@ pub static PRECONDITION_FAILURE: &'static str =
 pub struct ExecutionService<C, B> {
     instance: String,
     cas: C,
-    engine: ExecutionEngine<B, C>,
+    engine: ExecutionEngine<B>,
 }
 
 impl<C: ContentAddressableStorage, B> ExecutionService<C, B> {
-    pub fn new(instance: &str, cas: C, engine: ExecutionEngine<B, C>) -> Self {
+    pub fn new(instance: &str, cas: C, engine: ExecutionEngine<B>) -> Self {
         ExecutionService {
             instance: instance.to_string(),
             cas,

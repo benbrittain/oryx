@@ -80,14 +80,13 @@ pub struct ExecuteResponse {
     pub stdout: Vec<u8>,
 }
 
-pub struct ExecutionEngine<B, C> {
+pub struct ExecutionEngine<B> {
     backend: B,
-    cas: C,
 }
 
-impl<B: ExecutionBackend, C: ContentAddressableStorage> ExecutionEngine<B, C> {
-    pub fn new(backend: B, cas: C) -> Self {
-        ExecutionEngine { backend, cas }
+impl<B: ExecutionBackend> ExecutionEngine<B> {
+    pub fn new(backend: B) -> Self {
+        ExecutionEngine { backend }
     }
 
     pub fn execute<Exec>(
