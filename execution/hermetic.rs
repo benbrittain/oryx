@@ -6,7 +6,6 @@ use tokio::io::AsyncReadExt;
 use tokio::{fs::File, io::AsyncWriteExt, process};
 use tracing::instrument;
 
-
 #[derive(Debug, Clone)]
 pub struct Hermetic<C> {
     cas: C,
