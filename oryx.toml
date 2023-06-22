@@ -3,4 +3,4 @@
 instance = ""
 address = "[::1]:8980"
 storage_backend = "memory"
-execution_engine = "insecure"
+execution_engine = "hermetic"
