@@ -1,2 +1,3 @@
 buildscript = []
 cfgs = ["feature=\"libfuse3\""]
+rustc_flags = ["-lfuse3"]

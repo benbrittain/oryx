@@ -986,7 +986,10 @@ cargo.rust_library(
         "libfuse",
         "pkg-config",
     ],
-    rustc_flags = ["--cfg=feature=\"libfuse3\""],
+    rustc_flags = [
+        "-lfuse3",
+        "--cfg=feature=\"libfuse3\"",
+    ],
     visibility = [],
     deps = [
         ":libc-0.2.142",
