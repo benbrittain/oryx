@@ -92,6 +92,11 @@ rust_binary(
     crate_root = "bench/main.rs",
     rustc_flags = ["--cfg=test"],
     deps = [
+        "//third-party/rust:tower",
+        "//third-party/rust:tonic",
+        "//third-party/rust:tokio",
+        "//third-party/rust:tokio-stream",
+        "//third-party/rust:tempfile",
         "//third-party/rust:criterion",
         ":gemsbok",
         ":node_lib",

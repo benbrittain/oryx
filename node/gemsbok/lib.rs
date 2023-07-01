@@ -26,6 +26,7 @@ pub struct CommandDigest(pub Digest);
 pub struct DirectoryDigest(pub Digest);
 
 /// A simple client interface for interacting with the RBE protocol
+#[derive(Clone)]
 pub struct Gemsbok {
     exec: ExecutionClient<Channel>,
     cas: ContentAddressableStorageClient<Channel>,
