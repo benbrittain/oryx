@@ -1605,6 +1605,8 @@ dependencies = [
  "pretty_env_logger",
  "prost",
  "prost-types",
+ "rand 0.8.5",
+ "rand_chacha",
  "regex",
  "serde",
  "serde_json",

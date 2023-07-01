@@ -97,6 +97,8 @@ rust_binary(
         "//third-party/rust:tokio",
         "//third-party/rust:tokio-stream",
         "//third-party/rust:tempfile",
+        "//third-party/rust:rand",
+        "//third-party/rust:rand_chacha",
         "//third-party/rust:criterion",
         ":gemsbok",
         ":node_lib",

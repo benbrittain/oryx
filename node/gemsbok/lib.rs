@@ -212,7 +212,7 @@ impl Gemsbok {
         })
     }
 
-    async fn upload_blob(&mut self, encoded: &[u8]) -> Result<Digest, Error> {
+    pub async fn upload_blob(&mut self, encoded: &[u8]) -> Result<Digest, Error> {
         let encoded = encoded.to_vec();
         let mut hasher = Sha256::new();
         hasher.update(&encoded);

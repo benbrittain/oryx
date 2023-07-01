@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
+use criterion::{Throughput, BenchmarkId, criterion_group, criterion_main, Criterion};
 use gemsbok::*;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
@@ -6,16 +8,10 @@ use tokio::net::UnixListener;
 use tokio::net::UnixStream;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Channel, Endpoint, Uri};
+use tokio::runtime::Runtime;
 
-async fn upload_digest(mut client: Gemsbok) {
-    let _digest_of_upload = client
-        .add_command(&["/bin/sh", "-c", "echo 'rbe'"], &[])
-        .await
-        .unwrap();
-}
-
-fn upload_digest_benchmark(c: &mut Criterion) {
-    let rt = tokio::runtime::Runtime::new().expect("tokio runtime initialization");
+fn setup_oryx_benchmark() -> (Runtime, Channel) {
+    let rt = Runtime::new().expect("tokio runtime initialization");
 
     // Set up the stream
     let (stream, socket) = rt.block_on(async {
@@ -54,12 +50,36 @@ fn upload_digest_benchmark(c: &mut Criterion) {
             .unwrap()
     });
 
-    let mut client = Gemsbok::new(channel);
-
-    c.bench_function("upload_command", |b| {
-        b.to_async(&rt).iter(|| upload_digest(client.clone()))
-    });
+    (rt, channel)
 }
 
-criterion_group!(benches, upload_digest_benchmark);
+
+async fn upload_blob(mut client: Gemsbok, blob: &[u8]) {
+    let _digest_of_upload = client
+        .upload_blob(blob)
+        .await
+        .unwrap();
+}
+
+
+fn upload_blob_benchmark(c: &mut Criterion) {
+    let (rt, channel) = setup_oryx_benchmark();
+    let mut client = Gemsbok::new(channel);
+
+    static KB: usize = 1024;
+    let mut rng = ChaCha8Rng::seed_from_u64(42);
+    let blob: Vec<u8> = (0..64 * KB).map(|_| rng.gen()).collect();
+
+    let mut group = c.benchmark_group("upload_blob");
+    for size in [32, KB, 2 * KB, 8 * KB, 32 * KB, 64 * KB].iter() {
+        group.throughput(Throughput::Bytes(*size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let blob = &blob[..size];
+            b.to_async(&rt).iter(|| upload_blob(client.clone(), blob))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, upload_blob_benchmark);
 criterion_main!(benches);

@@ -3783,6 +3783,12 @@ cargo.rust_library(
     visibility = [],
 )
 
+alias(
+    name = "rand",
+    actual = ":rand-0.8.5",
+    visibility = ["PUBLIC"],
+)
+
 http_archive(
     name = "rand-0.8.5.crate",
     sha256 = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404",
@@ -3828,6 +3834,12 @@ cargo.rust_library(
     ],
 )
 
+alias(
+    name = "rand_chacha",
+    actual = ":rand_chacha-0.3.1",
+    visibility = ["PUBLIC"],
+)
+
 http_archive(
     name = "rand_chacha-0.3.1.crate",
     sha256 = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88",
@@ -3842,7 +3854,10 @@ cargo.rust_library(
     crate = "rand_chacha",
     crate_root = "rand_chacha-0.3.1.crate/src/lib.rs",
     edition = "2018",
-    features = ["std"],
+    features = [
+        "default",
+        "std",
+    ],
     visibility = [],
     deps = [
         ":ppv-lite86-0.2.17",
