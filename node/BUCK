@@ -61,3 +61,15 @@ rust_test(
         "//third-party/rust:base16ct",
     ],
 )
+
+
+rust_binary(
+    name = "bench",
+    srcs = glob(["bench/**/*.rs"]),
+    crate_root = "bench/main.rs",
+    rustc_flags = ["--cfg=test"],
+    deps = [
+        "//third-party/rust:criterion",
+        ":node_lib",
+    ],
+)
