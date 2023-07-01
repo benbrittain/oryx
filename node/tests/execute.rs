@@ -1,4 +1,4 @@
-use crate::gemsbok::*;
+use gemsbok::*;
 use crate::oryx_test;
 use common::Digest;
 use prost::Message;

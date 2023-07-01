@@ -16,6 +16,28 @@ rust_binary(
 )
 
 rust_library(
+    name = "gemsbok",
+    srcs = glob(["gemsbok/**/*.rs"]),
+    crate_root = "gemsbok/lib.rs",
+    doctests = False,
+    deps = [
+        "//proto:protos",
+        "//third-party/rust:anyhow",
+        "//third-party/rust:futures",
+        "//third-party/rust:serde",
+        "//third-party/rust:tokio",
+        "//third-party/rust:tokio-stream",
+        "//third-party/rust:tonic",
+        "//third-party/rust:tracing",
+        "//third-party/rust:prost",
+        "//third-party/rust:prost-types",
+        "//third-party/rust:base16ct",
+        "//third-party/rust:sha2",
+        "//common:common",
+    ],
+)
+
+rust_library(
     name = "node_lib",
     srcs = glob(["src/**/*.rs"]),
     crate_root = "src/lib.rs",
@@ -44,6 +66,7 @@ rust_test(
     crate_root = "tests/main.rs",
     deps = [
         ":node_lib",
+        ":gemsbok",
         "//proto:protos",
         "//common:common",
         "//third-party/rust:anyhow",
@@ -70,6 +93,7 @@ rust_binary(
     rustc_flags = ["--cfg=test"],
     deps = [
         "//third-party/rust:criterion",
+        ":gemsbok",
         ":node_lib",
     ],
 )
