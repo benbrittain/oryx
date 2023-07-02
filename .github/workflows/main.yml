@@ -6,9 +6,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-        with: 
+        with:
           submodules: true
       - name: Install libfuse3
-        run: sudo apt-get install -y fuse3
+        run: sudo apt-get update; sudo apt-get install -y fuse3 libfuse3-dev libfuse3-3
       - uses: dtolnay/install-buck2@latest
       - run: buck2 test //...
