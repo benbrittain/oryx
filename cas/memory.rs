@@ -21,8 +21,6 @@ impl crate::ContentAddressableStorage for InMemory {
         data: &[u8],
         expected_digest: Option<Digest>,
     ) -> Result<Digest, CasError> {
-        log::info!("write: {}: {:?}", data.len(), expected_digest);
-
         let mut hasher = Sha256::new();
         hasher.update(&data);
         let hash_buf = hasher.finalize();
@@ -45,14 +43,12 @@ impl crate::ContentAddressableStorage for InMemory {
         let data = cas
             .get(&digest)
             .ok_or_else(|| CasError::BlobNotFound(digest.clone()))?;
-        log::info!("read blob: {}", digest);
         Ok(data.to_vec())
     }
 
     async fn has_blob(&self, digest: &Digest) -> Result<bool, CasError> {
         let cas = self.cas.lock().await;
         let r = cas.contains_key(digest);
-        log::info!("check blob: {} = {}", digest, r);
         Ok(r)
     }
 }

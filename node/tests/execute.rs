@@ -1,6 +1,6 @@
-use gemsbok::*;
 use crate::oryx_test;
 use common::Digest;
+use gemsbok::*;
 use prost::Message;
 use protos::{
     longrunning::operation::Result::Response,

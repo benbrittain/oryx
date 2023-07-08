@@ -1,12 +1,13 @@
 use clap::Parser;
 use serde::Deserialize;
 use std::path::PathBuf;
+use tokio::signal;
 use tokio::{fs::File, io::AsyncReadExt};
 use toml::Table;
-use tracing::info;
+use tracing::{info, span};
 
-use tracing_chrome::{ChromeLayerBuilder, TraceStyle};
-use tracing_subscriber::{prelude::*, registry::Registry};
+use opentelemetry::global;
+use tracing_subscriber::{fmt, layer::SubscriberExt, registry::Registry, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
 #[command(name = "oryx-node")]
@@ -17,10 +18,6 @@ struct Args {
     /// Path to oryx configuration file
     #[arg(long)]
     config: PathBuf,
-
-    /// Enable traces for visualizing in https://ui.perfetto.dev
-    #[arg(long)]
-    trace: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -29,6 +26,7 @@ pub struct NodeConfig {
     address: std::net::SocketAddr,
     storage_backend: node_lib::StorageBackend,
     execution_engine: node_lib::ExecutionEngine,
+    trace: bool,
 }
 
 /// Read the oryx node config
@@ -46,24 +44,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = read_config(args.config).await?;
 
-    let _guard = if args.trace {
-        let (chrome_layer, guard) = ChromeLayerBuilder::new()
-            .include_args(true)
-            .trace_style(TraceStyle::Async)
-            .build();
-        tracing_subscriber::registry().with(chrome_layer).init();
-        Some(guard)
+    if config.trace {
+        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+        let tracer = opentelemetry_jaeger::new_agent_pipeline()
+            .with_auto_split_batch(true)
+            .with_service_name("oryx")
+            .install_batch(opentelemetry::runtime::Tokio)?;
+        let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+        tracing_subscriber::registry()
+            .with(opentelemetry)
+            .with(fmt::Layer::default())
+            .try_init()?;
+        Some(())
     } else {
         tracing_subscriber::fmt::init();
         None
     };
+    let root = span!(tracing::Level::TRACE, "oryx", work_units = 2);
+    info!("Initialized");
 
-    node_lib::start_oryx(
+    let oryx_fut = node_lib::start_oryx(
         config.instance,
         node_lib::Connection::Tcp(config.address),
         config.storage_backend,
         config.execution_engine,
-    )
-    .await?;
+    );
+
+    tokio::select! {
+        _ = signal::ctrl_c() => (),
+        _ = oryx_fut => unreachable!(),
+    }
+
+    global::shutdown_tracer_provider();
     Ok(())
 }

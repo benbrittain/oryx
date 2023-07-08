@@ -1,14 +1,14 @@
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use gemsbok::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
-use criterion::{Throughput, BenchmarkId, criterion_group, criterion_main, Criterion};
-use gemsbok::*;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use tokio::net::UnixListener;
 use tokio::net::UnixStream;
+use tokio::runtime::Runtime;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Channel, Endpoint, Uri};
-use tokio::runtime::Runtime;
 
 fn setup_oryx_benchmark() -> (Runtime, Channel) {
     let rt = Runtime::new().expect("tokio runtime initialization");
@@ -53,14 +53,9 @@ fn setup_oryx_benchmark() -> (Runtime, Channel) {
     (rt, channel)
 }
 
-
 async fn upload_blob(mut client: Gemsbok, blob: &[u8]) {
-    let _digest_of_upload = client
-        .upload_blob(blob)
-        .await
-        .unwrap();
+    let _digest_of_upload = client.upload_blob(blob).await.unwrap();
 }
-
 
 fn upload_blob_benchmark(c: &mut Criterion) {
     let (rt, channel) = setup_oryx_benchmark();

@@ -6,6 +6,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
 use tokio::sync::mpsc;
+use tracing::{event, span, Instrument, Level};
 use uuid::Uuid;
 
 use crate::{Command, DirectoryLayout, ExecuteError, ExecuteResponse, ExecutionBackend};
@@ -41,6 +42,7 @@ impl<B: ExecutionBackend> ExecutionEngine<B> {
     where
         Exec: Future<Output = Result<(Digest, Command, DirectoryLayout), ExecuteError>> + Send,
     {
+        let span = span!(Level::TRACE, "execute backend");
         let (tx, rx) = mpsc::channel(32);
         let backend = self.backend.clone();
         let uuid = Uuid::new_v4();
@@ -48,66 +50,68 @@ impl<B: ExecutionBackend> ExecutionEngine<B> {
         //
         // TODO we really need to capture any errors in here
         //
-        tokio::spawn(async move {
-            log::info!("================= {uuid} | Start =================");
-            // Run the actual command using the backend.
-            match setup_func().await {
-                Ok((action_digest, cmd, layout)) => {
-                    log::info!("================= {uuid} | Queued =================");
-                    tx.send(ExecuteStatus {
-                        uuid: uuid,
-                        action_digest: Some(action_digest.clone()),
-                        stage: ExecuteStage::Queued,
-                    })
-                    .await?;
+        tokio::spawn(
+            async move {
+                let setup_span = span!(Level::TRACE, "setup function");
+                // Run the actual command using the backend.
+                match setup_func().instrument(setup_span).await {
+                    Ok((action_digest, cmd, layout)) => {
+                        tx.send(ExecuteStatus {
+                            uuid: uuid,
+                            action_digest: Some(action_digest.clone()),
+                            stage: ExecuteStage::Queued,
+                        })
+                        .await?;
 
-                    // TODO scheduling logic here
-                    log::info!("================= {uuid} | Running =================");
-                    tx.send(ExecuteStatus {
-                        uuid: uuid,
-                        action_digest: Some(action_digest.clone()),
-                        stage: ExecuteStage::Running,
-                    })
-                    .await?;
+                        // TODO scheduling logic here
+                        tx.send(ExecuteStatus {
+                            uuid: uuid,
+                            action_digest: Some(action_digest.clone()),
+                            stage: ExecuteStage::Running,
+                        })
+                        .await?;
 
-                    // Run the actual command using the backend.
-                    match backend.run_command(cmd, layout).await {
-                        Ok(resp) => {
-                            log::info!("================= {uuid} | Done =================");
-                            tx.send(ExecuteStatus {
-                                uuid: uuid,
-                                action_digest: Some(action_digest.clone()),
-                                stage: ExecuteStage::Done(ExecuteResponse {
-                                    exit_status: resp.exit_status,
-                                    output_paths: resp.output_paths,
-                                    stderr: resp.stderr,
-                                    stdout: resp.stdout,
-                                }),
-                            })
-                            .await?;
-                        }
-                        Err(err) => {
-                            tx.send(ExecuteStatus {
-                                uuid: uuid,
-                                action_digest: None,
-                                stage: ExecuteStage::Error(err),
-                            })
-                            .await?;
+                        // Run the actual command using the backend.
+                        let run_span = span!(Level::TRACE, "run command");
+                        match backend.run_command(cmd, layout).instrument(run_span).await {
+                            Ok(resp) => {
+                                event!(Level::TRACE, exit_status = resp.exit_status, "result");
+                                tx.send(ExecuteStatus {
+                                    uuid: uuid,
+                                    action_digest: Some(action_digest.clone()),
+                                    stage: ExecuteStage::Done(ExecuteResponse {
+                                        exit_status: resp.exit_status,
+                                        output_paths: resp.output_paths,
+                                        stderr: resp.stderr,
+                                        stdout: resp.stdout,
+                                    }),
+                                })
+                                .await?;
+                            }
+                            Err(err) => {
+                                tx.send(ExecuteStatus {
+                                    uuid: uuid,
+                                    action_digest: None,
+                                    stage: ExecuteStage::Error(err),
+                                })
+                                .await?;
+                            }
                         }
                     }
+                    Err(err) => {
+                        tx.send(ExecuteStatus {
+                            uuid: uuid,
+                            action_digest: None,
+                            stage: ExecuteStage::Error(err),
+                        })
+                        .await?;
+                    }
                 }
-                Err(err) => {
-                    tx.send(ExecuteStatus {
-                        uuid: uuid,
-                        action_digest: None,
-                        stage: ExecuteStage::Error(err),
-                    })
-                    .await?;
-                }
+                // TODO caching logic here
+                anyhow::Ok(())
             }
-            // TODO caching logic here
-            anyhow::Ok(())
-        });
+            .instrument(span),
+        );
 
         Ok(rx)
     }

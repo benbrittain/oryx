@@ -1,8 +1,15 @@
 load(":defs.bzl", "platforms", "default_config")
 
 platforms(
-  name = "platforms",
+  name = "local",
   cpu_configuration = default_config.cpu,
   os_configuration = default_config.os,
   remote = False,
+)
+
+platforms(
+  name = "remote",
+  cpu_configuration = default_config.cpu,
+  os_configuration = default_config.os,
+  remote = True,
 )

@@ -11,6 +11,9 @@ rust_binary(
         "//third-party/rust:tracing",
         "//third-party/rust:tracing-subscriber",
         "//third-party/rust:tracing-chrome",
+        "//third-party/rust:opentelemetry",
+        "//third-party/rust:opentelemetry-jaeger",
+        "//third-party/rust:tracing-opentelemetry",
         ":node_lib",
     ],
 )
@@ -54,6 +57,8 @@ rust_library(
         "//third-party/rust:tracing",
         "//third-party/rust:prost",
         "//third-party/rust:prost-types",
+        "//third-party/rust:opentelemetry",
+        "//third-party/rust:tracing-opentelemetry",
         "//common:common",
         "//cas:cas",
         "//execution:execution-engine",

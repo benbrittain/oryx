@@ -5,7 +5,6 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tonic::{Request, Response, Status};
-use tracing::{error, info, instrument};
 
 #[derive(Debug)]
 pub struct BytestreamService<T> {
@@ -22,7 +21,6 @@ impl<T> BytestreamService<T> {
 impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
     type ReadStream = ReceiverStream<Result<protos::bytestream::ReadResponse, Status>>;
 
-    #[instrument(skip(self))]
     async fn read(
         &self,
         request: Request<protos::bytestream::ReadRequest>,
@@ -39,7 +37,6 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
         let cas = self.cas.clone();
 
         tokio::spawn(async move {
-            info!("digest: {digest}");
             // TODO Don't load whole blob into memory, stream from CAS.
             match cas.read_blob(digest).await {
                 Ok(blob) => {
@@ -58,7 +55,6 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
         Ok(Response::new(ReceiverStream::new(rx) as Self::ReadStream))
     }
 
-    #[instrument(skip(self))]
     async fn write(
         &self,
         request: Request<tonic::Streaming<protos::bytestream::WriteRequest>>,
@@ -91,7 +87,6 @@ impl<T: ContentAddressableStorage> protos::ByteStream for BytestreamService<T> {
         Err(tonic::Status::unknown(format!("Write did not succeed")))
     }
 
-    #[instrument(skip_all)]
     async fn query_write_status(
         &self,
         _request: Request<protos::bytestream::QueryWriteStatusRequest>,

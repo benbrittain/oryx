@@ -4,7 +4,6 @@ use futures::future::{BoxFuture, FutureExt};
 use prost::Message;
 use tokio::io::AsyncReadExt;
 use tokio::{fs::File, io::AsyncWriteExt, process};
-use tracing::instrument;
 
 use fuser::{
     FileAttr, FileType, Filesystem, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
@@ -140,7 +139,6 @@ impl<C: ContentAddressableStorage> Hermetic<C> {
 
 #[async_trait]
 impl<C: ContentAddressableStorage> ExecutionBackend for Hermetic<C> {
-    #[instrument(skip_all)]
     async fn run_command(
         &self,
         command: Command,

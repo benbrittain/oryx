@@ -24,4 +24,4 @@ cas_address = localhost:8980
 tls = false
 
 [build]
-execution_platforms = root//platforms:platforms
+execution_platforms = root//platforms:local

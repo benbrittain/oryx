@@ -5,8 +5,9 @@ use regex::Regex;
 static DIGEST_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new("([0-9a-f]+):([0-9]+)").expect("Failed to compile digest regex"));
 
-static BLOB_DIGEST_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new("blobs/([0-9a-f]+)/([0-9]+)").expect("Failed to compile blob digest regex"));
+static BLOB_DIGEST_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new("blobs/([0-9a-f]+)/([0-9]+)").expect("Failed to compile blob digest regex")
+});
 
 #[derive(Clone, Ord, PartialOrd, Default, PartialEq, Eq, Hash, Debug)]
 pub struct Digest {
@@ -73,7 +74,6 @@ impl std::str::FromStr for Digest {
         Ok(Digest {
             hash: matches[1].to_string(),
             size_bytes: matches[2]
-
                 .parse::<i64>()
                 .map_err(|_| OryxError::InvalidDigest(digest.to_string()))?,
             ..Default::default()

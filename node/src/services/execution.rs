@@ -5,6 +5,7 @@ use execution_engine::{
 };
 use futures::future::BoxFuture;
 use futures::StreamExt;
+use opentelemetry::global;
 use prost::Message;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -12,7 +13,8 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::{info, instrument, trace};
+use tracing::{event, span, Instrument, Level};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub static EXEC_OP_METADATA: &'static str =
     "type.googleapis.com/build.bazel.remote.execution.v2.ExecuteOperationMetadata";
@@ -58,8 +60,6 @@ fn create_mapping<'a, C: ContentAddressableStorage>(
 ) -> BoxFuture<'a, Result<(), ExecuteError>> {
     Box::pin(async move {
         for symlink in dir.symlinks {
-            info!("{:?}", symlink);
-
             let mut link_path = root.clone();
             link_path.push(&symlink.name);
 
@@ -110,11 +110,11 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
 {
     type ExecuteStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
 
-    #[instrument(skip_all)]
     async fn execute(
         &self,
         request: Request<protos::re::ExecuteRequest>,
     ) -> Result<Response<Self::ExecuteStream>, Status> {
+        let span = span!(Level::TRACE, "gRPC execute");
         let request = request.into_inner();
         if request.instance_name != self.instance {
             return Err(Status::permission_denied(
@@ -127,23 +127,22 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
         let mut exec_events = self
             .engine
             .execute(move || {
+                let span = span.clone();
                 let request = request.clone();
                 let cas = cas.clone();
+                let span = span!(Level::TRACE, "setup function");
                 async move {
                     let action_digest = request.action_digest.ok_or(
                         ExecuteError::InvalidArgument(String::from("no action digest specified")),
                     )?;
                     let action: protos::re::Action =
                         get_proto(cas.clone(), action_digest.clone().into()).await?;
-                    trace!("{action:#?}");
-
                     let command_digest =
                         action.command_digest.ok_or(ExecuteError::InvalidArgument(
                             String::from("Invalid Action: no command digest specified."),
                         ))?;
                     let command: protos::re::Command =
-                        get_proto(cas.clone(), command_digest.into()).await?;
-                    trace!("{command:#?}");
+                        get_proto(cas.clone(), command_digest.clone().into()).await?;
 
                     let root_digest =
                         action
@@ -152,8 +151,7 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                                 "Invalid Action: no root digest specified."
                             )))?;
                     let root_directory: protos::re::Directory =
-                        get_proto(cas.clone(), root_digest.into()).await?;
-                    trace!("{root_directory:#?}");
+                        get_proto(cas.clone(), root_digest.clone().into()).await?;
 
                     // Collect a command for the execution engine
                     let cmd = execution_engine::Command {
@@ -164,8 +162,6 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             .map(|ev| (ev.name.clone(), ev.value.clone()))
                             .collect(),
                     };
-                    eprintln!("{:#?}", root_directory);
-
                     // Collect the filesystem information for the execution engine
                     let mut dir_layout = execution_engine::DirectoryLayout::default();
                     create_mapping(
@@ -180,7 +176,6 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
                             "Failed to execute mapping collection: {e:?}"
                         ))
                     })?;
-                    trace!("{dir_layout:#?}");
 
                     assert!(command.working_directory.is_empty());
 
@@ -202,13 +197,13 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
 
                     Ok((action_digest.into(), cmd, dir_layout))
                 }
+                .instrument(span)
             })
             .map_err(|e| Status::unknown(format!("Failed to execute: {e}")))?;
 
         // TODO is there an easy way to map over this instead of making another channel?
         let (tx, rx) = mpsc::channel(32);
         while let Some(event) = exec_events.recv().await {
-            info!("{:?}", event);
             let op = convert_to_op(event);
             tx.send(op)
                 .await
@@ -220,7 +215,6 @@ impl<C: ContentAddressableStorage, B: ExecutionBackend> protos::Execution
 
     type WaitExecutionStream = ReceiverStream<Result<protos::longrunning::Operation, Status>>;
 
-    #[instrument(skip_all)]
     async fn wait_execution(
         &self,
         request: Request<protos::re::WaitExecutionRequest>,
@@ -369,8 +363,6 @@ fn convert_to_op(
             output_files.sort_by(|a, b| b.path.cmp(&a.path));
             output_directories.sort_by(|a, b| b.path.cmp(&a.path));
             output_symlinks.sort_by(|a, b| b.path.cmp(&a.path));
-
-            info!("output: {:#?}", output_files);
 
             let response = protos::re::ExecuteResponse {
                 result: Some(protos::re::ActionResult {

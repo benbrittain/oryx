@@ -7,7 +7,6 @@ rust_library(
     deps = [
         "//third-party/rust:async-trait",
         "//third-party/rust:base16ct",
-        "//third-party/rust:log",
         "//third-party/rust:sha2",
         "//third-party/rust:thiserror",
         "//third-party/rust:tokio",

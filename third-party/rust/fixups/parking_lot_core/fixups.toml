@@ -1,1 +1,2 @@
-[[buildscript]]
+cargo_env = true
+buildscript = []

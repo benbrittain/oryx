@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 use tokio::io::AsyncReadExt;
 use tokio::{fs::File, io::AsyncWriteExt, process};
-use tracing::instrument;
+use tracing::{event, span, Instrument, Level};
 
 #[derive(Debug, Clone)]
 pub struct Insecure<C> {
@@ -99,14 +99,14 @@ fn get_root_relative(root_path: &Path, path: &Path) -> PathBuf {
 
 #[async_trait]
 impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
-    #[instrument(skip_all)]
     async fn run_command(
         &self,
         command: Command,
         dir: DirectoryLayout,
     ) -> Result<ExecuteResponse, ExecuteError> {
-        log::info!("{command:#?}");
-        log::info!("{dir:#?}");
+        let span = span!(Level::TRACE, "insecure");
+
+        let setup_span = span!(parent: &span, Level::TRACE, "setup");
 
         // Create a temporary directory and write all files from the cas there
         let tmp_dir = TempDir::new("oryx-insecure")?;
@@ -115,98 +115,110 @@ impl<C: ContentAddressableStorage> ExecutionBackend for Insecure<C> {
         // Only here so I can look in the insecure folders in /tmp during testing.
         std::mem::forget(tmp_dir);
 
-        log::info!("Insecure directory: {root_path:#?}");
-        for entry in dir.entries {
-            match entry {
-                Entry::Symlink { original, link } => {
-                    let original = get_root_relative(&root_path, &original);
-                    if let Some(prefix) = original.parent() {
-                        std::fs::create_dir_all(prefix)?;
+        async {
+            for entry in dir.entries {
+                match entry {
+                    Entry::Symlink { original, link } => {
+                        let original = get_root_relative(&root_path, &original);
+                        if let Some(prefix) = original.parent() {
+                            std::fs::create_dir_all(prefix)?;
+                        }
+                        let link = get_root_relative(&root_path, &link);
+                        std::os::unix::fs::symlink(original, link)?;
                     }
-                    let link = get_root_relative(&root_path, &link);
-                    log::info!("symlink: {original:?} -> {link:?}");
-                    std::os::unix::fs::symlink(original, link)?;
-                }
-                Entry::Directory { path, .. } => {
-                    let path = get_root_relative(&root_path, &path);
-                    std::fs::create_dir_all(path)?;
-                }
-                Entry::File {
-                    digest,
-                    executable,
-                    path,
-                } => {
-                    let path = dbg!(get_root_relative(&root_path, &path));
-                    log::info!("entry: {path:#?}");
-                    log::info!("digest: {:?}", digest);
-                    if let Some(prefix) = path.parent() {
-                        std::fs::create_dir_all(prefix)?;
+                    Entry::Directory { path, .. } => {
+                        let path = get_root_relative(&root_path, &path);
+                        std::fs::create_dir_all(path)?;
                     }
-                    let mut file = File::create(&path).await?;
-                    let data = self.cas.read_blob(digest).await?;
-                    file.write_all(&data).await?;
-                    file.flush().await?;
-                    if executable {
-                        let metadata = file.metadata().await?;
-                        let mut permissions = metadata.permissions();
-                        permissions.set_mode(0o777);
-                        tokio::fs::set_permissions(&path, permissions).await?;
-                        log::info!("made executable.");
+                    Entry::File {
+                        digest,
+                        executable,
+                        path,
+                    } => {
+                        let path = dbg!(get_root_relative(&root_path, &path));
+                        if let Some(prefix) = path.parent() {
+                            std::fs::create_dir_all(prefix)?;
+                        }
+                        let mut file = File::create(&path).await?;
+                        let data = self.cas.read_blob(digest).await?;
+                        file.write_all(&data).await?;
+                        file.flush().await?;
+                        if executable {
+                            let metadata = file.metadata().await?;
+                            let mut permissions = metadata.permissions();
+                            permissions.set_mode(0o777);
+                            tokio::fs::set_permissions(&path, permissions).await?;
+                        }
                     }
                 }
             }
-        }
 
-        // Directories leading up to the output paths are created by the worker prior
-        // to execution, even if they are not explicitly part of the input root.
-        for path in &dir.output_paths {
-            let global_path = get_root_relative(&root_path, &path);
-            if let Some(prefix) = global_path.parent() {
-                std::fs::create_dir_all(prefix)?;
+            // Directories leading up to the output paths are created by the worker prior
+            // to execution, even if they are not explicitly part of the input root.
+            for path in &dir.output_paths {
+                let global_path = get_root_relative(&root_path, &path);
+                if let Some(prefix) = global_path.parent() {
+                    std::fs::create_dir_all(prefix)?;
+                }
             }
+            Ok::<(), ExecuteError>(())
         }
+        .instrument(setup_span)
+        .await;
 
         let binary = &command.arguments[0];
         let args = &command.arguments[1..];
+        let envs = command.env_vars;
+        let current_dir = root_path.clone();
+        let exec_span = span!(parent: &span, Level::TRACE, "execute",
+                binary=binary,
+                args=?args,
+                envs=?envs,
+                current_dir=?current_dir);
         let output = process::Command::new(binary)
-            .current_dir(root_path.clone())
+            .current_dir(current_dir)
             .args(args)
-            .envs(command.env_vars)
+            .envs(envs)
             .output()
+            .instrument(exec_span)
             .await?;
-        log::info!("{:?}", &output);
 
-        // Verify outputs were created and get their hash
-        let mut entries = vec![];
-        for path in dir.output_paths {
-            let global_path = get_root_relative(&root_path, &path);
-            let mut children = vec![];
-            if global_path.is_symlink() {
-                let symlink_path = global_path.read_link().expect("read_link call failed");
-                let symlink_path = get_root_relative(&root_path, &symlink_path);
-                entries.push(
-                    self.add_symlink(&root_path, &global_path, &symlink_path)
-                        .await?,
-                );
-            } else if global_path.is_dir() {
-                let root = self
-                    .add_dir(&root_path, &global_path, &mut children)
-                    .await?;
-                let tree = protos::re::Tree {
-                    root: Some(root),
-                    children,
-                };
-                let proto_buf = tree.encode_to_vec();
-                let digest = self.cas.write_blob(&proto_buf, None).await?;
-                entries.push(Entry::Directory { path, digest });
-            } else if global_path.is_file() {
-                entries.push(self.add_file(&root_path, &global_path).await?);
-            } else {
-                panic!("path of unknown type");
+        let finish_span = span!(parent: &span, Level::TRACE, "collect response");
+        let entries = async {
+            // Verify outputs were created and get their hash
+            let mut entries = vec![];
+            for path in dir.output_paths {
+                let global_path = get_root_relative(&root_path, &path);
+                let mut children = vec![];
+                if global_path.is_symlink() {
+                    let symlink_path = global_path.read_link().expect("read_link call failed");
+                    let symlink_path = get_root_relative(&root_path, &symlink_path);
+                    entries.push(
+                        self.add_symlink(&root_path, &global_path, &symlink_path)
+                            .await?,
+                    );
+                } else if global_path.is_dir() {
+                    let root = self
+                        .add_dir(&root_path, &global_path, &mut children)
+                        .await?;
+                    let tree = protos::re::Tree {
+                        root: Some(root),
+                        children,
+                    };
+                    let proto_buf = tree.encode_to_vec();
+                    let digest = self.cas.write_blob(&proto_buf, None).await?;
+                    entries.push(Entry::Directory { path, digest });
+                } else if global_path.is_file() {
+                    entries.push(self.add_file(&root_path, &global_path).await?);
+                } else {
+                    panic!("path of unknown type");
+                }
             }
+            Ok::<Vec<Entry>, ExecuteError>(entries)
         }
+        .instrument(finish_span)
+        .await?;
 
-        log::info!("Command Output: {output:?}");
         Ok(ExecuteResponse {
             exit_status: output.status.code().unwrap(),
             output_paths: entries,

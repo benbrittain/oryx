@@ -6,7 +6,6 @@ rust_library(
     doctests = False,
     deps = [
         "//proto:protos",
-        "//third-party/rust:log",
         "//third-party/rust:once_cell",
         "//third-party/rust:serde",
         "//third-party/rust:thiserror",

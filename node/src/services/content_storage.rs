@@ -1,7 +1,10 @@
+use crate::MetadataMap;
 use cas::*;
+use opentelemetry::global;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
-use tracing::{info, instrument, trace};
+use tracing::{event, span, Level};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 #[derive(Debug)]
 pub struct ContentStorageService<T> {
@@ -24,28 +27,29 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         &self,
         _request: tonic::Request<protos::re::GetTreeRequest>,
     ) -> CasResult<Self::GetTreeStream> {
-        info!("");
         todo!()
     }
 
-    #[instrument(skip_all)]
     async fn find_missing_blobs(
         &self,
         request: tonic::Request<protos::re::FindMissingBlobsRequest>,
     ) -> CasResult<protos::re::FindMissingBlobsResponse> {
+        let span = span!(Level::TRACE, "gRPC find_missing_blobs");
         let mut missing_blob_digests = vec![];
         for digest in request.into_inner().blob_digests {
+            let cdigest = digest.clone().into();
+            let span = span!(Level::TRACE, "Find missing blob", digest = %&cdigest);
             if !self
                 .cas
-                .has_blob(&digest.clone().into())
+                .has_blob(&cdigest)
                 .await
                 .map_err(|e| tonic::Status::unknown(e.to_string()))?
             {
+                event!(Level::INFO, digest = ?digest, "digest missing");
                 missing_blob_digests.push(digest);
             }
         }
 
-        info!("Missing {} blobs", missing_blob_digests.len());
         let resp = protos::re::FindMissingBlobsResponse {
             missing_blob_digests,
         };
@@ -53,25 +57,28 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         Ok(tonic::Response::new(resp))
     }
 
-    #[instrument(skip_all)]
     async fn batch_update_blobs(
         &self,
         request: tonic::Request<protos::re::BatchUpdateBlobsRequest>,
     ) -> CasResult<protos::re::BatchUpdateBlobsResponse> {
+        let span = span!(Level::TRACE, "gRPC batch_update_blobs");
         use protos::re::batch_update_blobs_response::Response;
         use protos::rpc::{Code, Status};
 
         let mut responses = vec![];
         for request in &request.get_ref().requests {
             let digest = request.digest.clone().unwrap_or_default().into();
+            let span = span!(Level::TRACE, "Update blob", digest = %&digest);
             match self.cas.write_blob(&request.data, Some(digest)).await {
                 Ok(_) => {
+                    event!(parent: &span, Level::INFO, "wrote blob");
                     responses.push(Response {
                         digest: request.digest.clone(),
                         status: Some(Status::default()),
                     });
                 }
                 Err(CasError::InvalidDigest(d1, d2)) => {
+                    event!(parent: &span, Level::INFO, "invalid digest");
                     responses.push(Response {
                         digest: request.digest.clone(),
                         status: Some(Status {
@@ -88,19 +95,20 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
         Ok(tonic::Response::new(resp))
     }
 
-    #[instrument(skip_all)]
     async fn batch_read_blobs(
         &self,
         request: tonic::Request<protos::re::BatchReadBlobsRequest>,
     ) -> CasResult<protos::re::BatchReadBlobsResponse> {
+        let span = span!(Level::TRACE, "gRPC batch_read_blobs");
         let request = request.into_inner();
 
         let mut responses = vec![];
         for digest in &request.digests {
-            info!("read digest: {:#?}", digest);
+            let cdigest = digest.clone().into();
+            let span = span!(Level::TRACE, "Read blob", digest = %&cdigest);
             let blob = self
                 .cas
-                .read_blob(digest.clone().into())
+                .read_blob(cdigest)
                 .await
                 .map_err(|e| tonic::Status::unknown(format!("Reading: {}", e)))?;
             responses.push(protos::re::batch_read_blobs_response::Response {
@@ -110,7 +118,6 @@ impl<T: ContentAddressableStorage> protos::ContentAddressableStorage for Content
                 status: Default::default(),
             });
         }
-        info!("read: {:#?}", request);
         let resp = protos::re::BatchReadBlobsResponse { responses };
         Ok(tonic::Response::new(resp))
     }
